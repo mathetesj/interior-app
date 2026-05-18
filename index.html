@@ -502,6 +502,29 @@
   .login-icon { font-size: 52px; }
   .login-title { font-size: 22px; font-weight: 700; text-align: center; }
   .login-desc { font-size: 14px; color: var(--text-secondary); text-align: center; line-height: 1.6; }
+  .login-name-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%;
+  }
+  .login-name-btn {
+    padding: 16px; border: 1.5px solid var(--border);
+    border-radius: var(--radius); background: var(--surface);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .login-name-btn:active { transform: scale(0.96); }
+  .login-name-btn.selected { border-color: var(--text-primary); background: var(--text-primary); color: white; }
+  .login-name-btn span { font-size: 24px; }
+  .pin-wrap { width: 100%; }
+  .pin-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; text-align: center; }
+  .pin-input {
+    width: 100%; padding: 16px; text-align: center;
+    font-size: 28px; letter-spacing: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius); background: var(--surface);
+    font-family: inherit; outline: none;
+  }
+  .pin-input:focus { border-color: var(--text-primary); }
   .login-btn {
     width: 100%; padding: 16px;
     background: var(--text-primary); color: white;
@@ -518,9 +541,21 @@
 <div id="login-screen">
   <div class="login-icon">🏠</div>
   <div class="login-title">우리집 인테리어</div>
-  <div class="login-desc">Google 계정으로 로그인하면<br>바로 시작할 수 있어요</div>
-  <button class="login-btn" onclick="App.login()">Google로 시작하기</button>
-  <div class="login-error" id="login-error">접근 권한이 없는 계정입니다</div>
+  <div class="login-desc">누구세요?</div>
+  <div class="login-name-grid">
+    <button class="login-name-btn" onclick="App.selectUser('husband', this)">
+      <span>👨</span>홍대표
+    </button>
+    <button class="login-name-btn" onclick="App.selectUser('wife', this)">
+      <span>👩</span>아내
+    </button>
+  </div>
+  <div class="pin-wrap">
+    <div class="pin-label">PIN 4자리</div>
+    <input class="pin-input" type="password" inputmode="numeric" maxlength="4" id="pin-input" placeholder="••••" onkeyup="if(this.value.length===4) App.login()">
+  </div>
+  <button class="login-btn" onclick="App.login()">시작하기</button>
+  <div class="login-error" id="login-error">PIN이 틀렸어요</div>
 </div>
 
 <!-- App Shell -->
@@ -667,9 +702,17 @@
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 const EMOJIS = ['🛋','🍳','🛏','🚿','🚪','📚','👗','🪴','🖼','💡','🛁','🪟','🏠','⭐','🎨','🪑','🛠','🧹','📦','🌿'];
 
+// ── PIN 설정 (여기서 변경) ──
+const PIN = '1234';
+const USERS = {
+  husband: { name: '홍대표', email: 'husband' },
+  wife:    { name: '아내',   email: 'wife' }
+};
+
 const App = {
   state: {
     user: null,
+    selectedUserKey: null,
     spaces: [],
     currentSpace: 'all',
     currentPage: 'feed',
@@ -683,39 +726,71 @@ const App = {
 
   // ── Auth ──────────────────────────────
 
-  login() {
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=&response_type=token&scope=email%20profile&redirect_uri=${encodeURIComponent(location.href)}`;
-    // Apps Script Web App은 자체 Google 인증 사용
-    // 실제로는 Apps Script가 로그인 처리 — 직접 API 호출 시 자동 리다이렉트
-    this.checkAuth();
+  selectUser(key, btn) {
+    this.state.selectedUserKey = key;
+    document.querySelectorAll('.login-name-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('pin-input').focus();
+  },
+
+  async login() {
+    const pin = document.getElementById('pin-input').value;
+    const errEl = document.getElementById('login-error');
+
+    if (!this.state.selectedUserKey) {
+      errEl.textContent = '먼저 이름을 선택해주세요';
+      errEl.style.display = 'block'; return;
+    }
+    if (pin !== PIN) {
+      errEl.textContent = 'PIN이 틀렸어요';
+      errEl.style.display = 'block';
+      document.getElementById('pin-input').value = '';
+      return;
+    }
+
+    errEl.style.display = 'none';
+    const userInfo = USERS[this.state.selectedUserKey];
+    this.state.user = userInfo;
+    localStorage.setItem('user_key', this.state.selectedUserKey);
+    localStorage.setItem('user_name', userInfo.name);
+
+    document.getElementById('settings-email').textContent = userInfo.name;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+
+    await this.initApp();
   },
 
   async checkAuth() {
-    try {
-      const res = await this.api('getSpaces');
-      if (res.error === 'unauthorized') {
-        document.getElementById('login-error').style.display = 'block';
-        return;
-      }
-      // 인증 성공
-      const email = localStorage.getItem('user_email') || '';
-      this.state.user = { email };
-      document.getElementById('settings-email').textContent = email || '로그인됨';
+    const key = localStorage.getItem('user_key');
+    const name = localStorage.getItem('user_name');
+    if (key && name && USERS[key]) {
+      this.state.user = USERS[key];
+      this.state.selectedUserKey = key;
+      document.getElementById('settings-email').textContent = name;
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
+      await this.initApp();
+    }
+    // 저장된 세션 없으면 로그인 화면 유지
+  },
+
+  async initApp() {
+    try {
+      const res = await this.api('getSpaces');
       this.state.spaces = res.spaces || [];
       this.renderSpaceTabs();
       this.renderAddSpaceGrid();
       this.renderSettingsSpaces();
       this.loadFeed();
     } catch(e) {
-      // Apps Script 인증 리다이렉트 처리
-      window.location.href = API + '?action=getSpaces';
+      this.showToast('서버 연결 실패. 새로고침 해주세요.');
     }
   },
 
   logout() {
-    localStorage.clear();
+    localStorage.removeItem('user_key');
+    localStorage.removeItem('user_name');
     location.reload();
   },
 
@@ -724,15 +799,16 @@ const App = {
   async api(action, params = {}) {
     const url = new URL(API);
     url.searchParams.set('action', action);
+    if (this.state.user) url.searchParams.set('user_name', this.state.user.name);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const res = await fetch(url.toString(), { credentials: 'include' });
+    const res = await fetch(url.toString());
     return res.json();
   },
 
   async apiPost(body) {
+    if (this.state.user) body.user_name = this.state.user.name;
     const res = await fetch(API, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
@@ -1165,10 +1241,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === this) App.closeModal();
   });
 
-  // 탭 초기 숨김
+  // 탭 초기 설정
   document.getElementById('space-tabs').style.display = 'flex';
 
-  // 인증 체크
+  // 저장된 로그인 세션 확인
   App.checkAuth();
 });
 </script>
