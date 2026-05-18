@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="우리집">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>우리집 인테리어</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, 'Noto Sans KR', sans-serif;
+    background: #f8f7f4;
+    color: #1a1a1a;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* ── CSS Variables ── */
+  :root {
+    --nav-h: 64px;
+    --header-h: 56px;
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --text-primary: #1a1a1a;
+    --text-secondary: #6b6b6b;
+    --text-tertiary: #a0a0a0;
+    --accent: #2d2d2d;
+    --love: #e05c7a;
+    --no: #e05c3a;
+    --hold: #c49a2a;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  /* ── App Shell ── */
+  #app { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Header ── */
+  .header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+  .header-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .header-action {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-primary);
+  }
+  .header-action svg { width: 20px; height: 20px; }
+
+  /* ── Space Tabs ── */
+  .space-tabs {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  .space-tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    border: none; background: none; cursor: pointer;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    position: relative;
+    transition: color 0.15s;
+  }
+  .tab-btn.active {
+    color: var(--text-primary);
+  }
+  .tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 12px; right: 12px;
+    height: 2px;
+    background: var(--text-primary);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* ── Pages ── */
+  .page {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(var(--nav-h) + 16px);
+  }
+  .page.active { display: block; }
+
+  /* ── Feed Page ── */
+  .feed-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 0.5px solid var(--border);
+  }
+
+  .card-img {
+    width: 100%; aspect-ratio: 4/3;
+    object-fit: cover; display: block;
+    background: #ebebeb;
+  }
+  .card-img-placeholder {
+    width: 100%; aspect-ratio: 4/3;
+    background: #f0efec;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card-img-placeholder svg { width: 32px; height: 32px; color: #c0bfbb; }
+
+  .card-link-thumb {
+    width: 100%; height: 140px;
+    background: #f0efec;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .card-link-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .card-link-thumb-fallback {
+    width: 100%; height: 140px;
+    background: #f0efec;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 6px;
+  }
+  .card-link-thumb-fallback svg { width: 28px; height: 28px; color: #c0bfbb; }
+  .card-link-thumb-fallback span { font-size: 12px; color: var(--text-tertiary); }
+
+  .card-body { padding: 12px 14px; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; line-height: 1.4; }
+  .card-meta {
+    font-size: 12px; color: var(--text-tertiary);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card-meta-dot { width: 2px; height: 2px; border-radius: 50%; background: var(--text-tertiary); }
+  .card-memo { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5; }
+
+  .card-link-url {
+    font-size: 12px; color: var(--text-tertiary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .card-link-url svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+  /* ── Reactions ── */
+  .reactions {
+    display: flex; gap: 6px; align-items: center;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--border);
+  }
+  .react-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+    background: var(--bg);
+    font-size: 12px; font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .react-btn:active { transform: scale(0.94); }
+  .react-btn.love { background: #fef0f3; border-color: #f5c0cc; color: var(--love); }
+  .react-btn.no   { background: #fef1ee; border-color: #f5c0b0; color: var(--no); }
+  .react-btn.hold { background: #fdf8ec; border-color: #f0dfa0; color: var(--hold); }
+  .react-count { font-size: 11px; color: var(--text-tertiary); margin-left: auto; display: flex; align-items: center; gap: 3px; }
+  .react-count svg { width: 13px; height: 13px; }
+
+  /* ── Empty State ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 60px 20px; text-align: center; gap: 12px;
+  }
+  .empty-icon { font-size: 40px; }
+  .empty-title { font-size: 16px; font-weight: 600; }
+  .empty-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+  /* ── Add Page ── */
+  .add-page { padding: 16px; }
+  .section-label {
+    font-size: 12px; font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 8px; margin-top: 20px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .type-btn {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .type-btn:active { transform: scale(0.96); }
+  .type-btn.selected { border-color: var(--text-primary); background: var(--text-primary); color: white; }
+  .type-btn svg { width: 24px; height: 24px; }
+  .type-btn span { font-size: 13px; font-weight: 500; }
+
+  .space-select-grid {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .space-chip {
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .space-chip:active { transform: scale(0.95); }
+  .space-chip.selected { background: var(--text-primary); color: white; border-color: var(--text-primary); }
+
+  .input-field {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-field:focus { border-color: var(--text-primary); }
+  .input-field::placeholder { color: var(--text-tertiary); }
+  textarea.input-field { min-height: 80px; resize: none; line-height: 1.5; }
+
+  .upload-area {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .upload-area:active { background: #f0efec; }
+  .upload-area svg { width: 32px; height: 32px; color: var(--text-tertiary); }
+  .upload-area span { font-size: 14px; color: var(--text-secondary); }
+  .upload-area small { font-size: 12px; color: var(--text-tertiary); }
+  #file-input { display: none; }
+
+  .preview-img-wrap {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .preview-img { width: 100%; max-height: 220px; object-fit: cover; display: block; }
+  .preview-remove {
+    position: absolute; top: 8px; right: 8px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: white;
+  }
+  .preview-remove svg { width: 14px; height: 14px; }
+
+  .submit-btn {
+    width: 100%; padding: 16px;
+    background: var(--text-primary); color: white;
+    border: none; border-radius: var(--radius);
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 24px;
+    transition: opacity 0.15s;
+    font-family: inherit;
+  }
+  .submit-btn:active { opacity: 0.85; }
+  .submit-btn:disabled { opacity: 0.4; }
+
+  /* ── Summary Page ── */
+  .summary-page { padding: 16px; }
+  .summary-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    overflow: hidden; margin-bottom: 12px;
+  }
+  .summary-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-icon { font-size: 20px; width: 28px; text-align: center; }
+  .summary-info { flex: 1; }
+  .summary-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .summary-bar-bg {
+    height: 4px; background: #ebebeb; border-radius: 2px;
+    overflow: hidden; width: 100%;
+  }
+  .summary-bar-fill { height: 100%; background: var(--love); border-radius: 2px; transition: width 0.6s ease; }
+  .summary-nums {
+    text-align: right; flex-shrink: 0;
+  }
+  .summary-agreed { font-size: 15px; font-weight: 700; color: var(--love); }
+  .summary-total { font-size: 11px; color: var(--text-tertiary); }
+
+  .summary-header {
+    padding: 20px 16px 8px;
+    font-size: 13px; color: var(--text-secondary); line-height: 1.6;
+  }
+
+  /* ── Settings Page ── */
+  .settings-page { padding: 16px; }
+  .settings-section {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .settings-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-icon { font-size: 18px; width: 28px; text-align: center; }
+  .settings-row-label { flex: 1; font-size: 14px; }
+  .settings-row-action {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); padding: 4px;
+    display: flex; align-items: center;
+  }
+  .settings-row-action svg { width: 18px; height: 18px; }
+
+  .settings-add-btn {
+    width: 100%; padding: 14px 16px;
+    background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; color: #4a90d9;
+    font-family: inherit;
+  }
+  .settings-add-btn svg { width: 18px; height: 18px; }
+
+  .toggle {
+    width: 44px; height: 26px;
+    border-radius: 13px; border: none;
+    background: #ddd; cursor: pointer;
+    position: relative; transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: ''; position: absolute;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: white; top: 2px; left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle.on { background: #2d2d2d; }
+  .toggle.on::after { transform: translateX(18px); }
+
+  /* ── Bottom Nav ── */
+  .bottom-nav {
+    height: var(--nav-h);
+    background: var(--surface);
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .nav-btn {
+    flex: 1; border: none; background: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3px;
+    color: var(--text-tertiary);
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-btn.active { color: var(--text-primary); }
+  .nav-btn svg { width: 22px; height: 22px; }
+  .nav-btn span { font-size: 10px; font-weight: 500; }
+  .nav-center {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .nav-add {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--text-primary); border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: white;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    transition: transform 0.15s;
+  }
+  .nav-add:active { transform: scale(0.92); }
+  .nav-add svg { width: 22px; height: 22px; }
+
+  /* ── Modal / Sheet ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 100;
+    align-items: flex-end;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet {
+    width: 100%; background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 12px 16px 32px;
+    max-height: 80vh; overflow-y: auto;
+  }
+  .modal-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--border); margin: 0 auto 16px;
+  }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .modal-input {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 15px; font-family: inherit;
+    outline: none; margin-bottom: 12px;
+  }
+  .modal-input:focus { border-color: var(--text-primary); }
+  .emoji-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px;
+  }
+  .emoji-btn {
+    aspect-ratio: 1; border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--bg);
+    font-size: 22px; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+  }
+  .emoji-btn.selected { border-color: var(--text-primary); background: var(--text-primary); }
+  .modal-confirm {
+    width: 100%; padding: 14px;
+    background: var(--text-primary); color: white;
+    border: none; border-radius: var(--radius);
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .modal-cancel {
+    width: 100%; padding: 14px;
+    background: none; color: var(--text-secondary);
+    border: none; font-size: 14px;
+    cursor: pointer; margin-top: 8px; font-family: inherit;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: calc(var(--nav-h) + 16px); left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1a1a1a; color: white;
+    padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; font-weight: 500;
+    opacity: 0; transition: all 0.25s;
+    z-index: 200; white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Loading ── */
+  .loading-wrap {
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px;
+  }
+  .spinner {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--text-primary);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Skeleton ── */
+  .skeleton { background: linear-gradient(90deg, #ebebeb 25%, #f5f5f5 50%, #ebebeb 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ── Login Screen ── */
+  #login-screen {
+    position: fixed; inset: 0; background: #f8f7f4;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; z-index: 300; padding: 40px;
+  }
+  .login-icon { font-size: 52px; }
+  .login-title { font-size: 22px; font-weight: 700; text-align: center; }
+  .login-desc { font-size: 14px; color: var(--text-secondary); text-align: center; line-height: 1.6; }
+  .login-btn {
+    width: 100%; padding: 16px;
+    background: var(--text-primary); color: white;
+    border: none; border-radius: var(--radius);
+    font-size: 15px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .login-error { font-size: 13px; color: var(--no); text-align: center; display: none; }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-icon">🏠</div>
+  <div class="login-title">우리집 인테리어</div>
+  <div class="login-desc">Google 계정으로 로그인하면<br>바로 시작할 수 있어요</div>
+  <button class="login-btn" onclick="App.login()">Google로 시작하기</button>
+  <div class="login-error" id="login-error">접근 권한이 없는 계정입니다</div>
+</div>
+
+<!-- App Shell -->
+<div id="app" style="display:none">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-title" id="header-title">우리집</div>
+    <button class="header-action" onclick="App.refresh()" aria-label="새로고침">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Space Tabs (feed only) -->
+  <div class="space-tabs" id="space-tabs"></div>
+
+  <!-- Pages -->
+  <div class="page active" id="page-feed">
+    <div class="feed-list" id="feed-list">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-add">
+    <div class="add-page">
+      <div class="section-label">종류 선택</div>
+      <div class="type-grid">
+        <button class="type-btn selected" onclick="App.selectType('photo', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <span>사진</span>
+        </button>
+        <button class="type-btn" onclick="App.selectType('link', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>링크</span>
+        </button>
+        <button class="type-btn" onclick="App.selectType('memo', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span>메모</span>
+        </button>
+      </div>
+
+      <div class="section-label">공간 선택</div>
+      <div class="space-select-grid" id="add-space-grid"></div>
+
+      <!-- Photo Input -->
+      <div id="input-photo">
+        <div class="section-label">사진</div>
+        <div id="photo-preview-wrap"></div>
+        <label class="upload-area" for="file-input" id="upload-area">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>사진 선택하기</span>
+          <small>갤러리 또는 카메라</small>
+        </label>
+        <input type="file" id="file-input" accept="image/*" capture="environment" onchange="App.onFileSelect(this)">
+      </div>
+
+      <!-- Link Input -->
+      <div id="input-link" style="display:none">
+        <div class="section-label">URL 붙여넣기</div>
+        <input type="url" class="input-field" id="link-url" placeholder="https://..." inputmode="url">
+      </div>
+
+      <div class="section-label">한마디 <span style="font-weight:400;color:var(--text-tertiary)">(선택)</span></div>
+      <textarea class="input-field" id="add-memo" placeholder="예) 이 색감 진짜 좋다, 근데 가격이..."></textarea>
+
+      <button class="submit-btn" id="submit-btn" onclick="App.submitItem()">저장하기</button>
+    </div>
+  </div>
+
+  <div class="page" id="page-summary">
+    <div class="summary-page">
+      <div class="summary-header">둘 다 ❤️ 를 누른 항목 기준이에요.<br>업자 미팅 전에 여기서 확인하세요.</div>
+      <div class="summary-card" id="summary-list">
+        <div class="loading-wrap"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-settings">
+    <div class="settings-page">
+      <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">공간 관리</div>
+      <div class="settings-section">
+        <div id="settings-spaces-list"></div>
+        <button class="settings-add-btn" onclick="App.openAddSpaceModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          새 공간 추가
+        </button>
+      </div>
+
+      <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">계정</div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-row-icon">👤</div>
+          <div class="settings-row-label" id="settings-email" style="font-size:13px;color:var(--text-secondary)">로딩 중...</div>
+        </div>
+        <div class="settings-row" style="cursor:pointer" onclick="App.logout()">
+          <div class="settings-row-icon">🚪</div>
+          <div class="settings-row-label" style="color:var(--no)">로그아웃</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-feed" onclick="App.navigate('feed')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>피드</span>
+    </button>
+    <div class="nav-center">
+      <button class="nav-add" onclick="App.navigate('add')" aria-label="올리기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+    <button class="nav-btn" id="nav-summary" onclick="App.navigate('summary')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>현황</span>
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="App.navigate('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>설정</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Space Edit Modal -->
+<div class="modal-overlay" id="space-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="space-modal-title">공간 추가</div>
+    <div class="emoji-grid" id="emoji-grid"></div>
+    <input type="text" class="modal-input" id="space-name-input" placeholder="공간 이름 (예: 드레스룸)">
+    <button class="modal-confirm" onclick="App.confirmSpace()">저장</button>
+    <button class="modal-cancel" onclick="App.closeModal()">취소</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
+const EMOJIS = ['🛋','🍳','🛏','🚿','🚪','📚','👗','🪴','🖼','💡','🛁','🪟','🏠','⭐','🎨','🪑','🛠','🧹','📦','🌿'];
+
+const App = {
+  state: {
+    user: null,
+    spaces: [],
+    currentSpace: 'all',
+    currentPage: 'feed',
+    addType: 'photo',
+    addSpaceId: null,
+    photoBase64: null,
+    photoName: null,
+    editingSpace: null,
+    selectedEmoji: '🏠',
+  },
+
+  // ── Auth ──────────────────────────────
+
+  login() {
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=&response_type=token&scope=email%20profile&redirect_uri=${encodeURIComponent(location.href)}`;
+    // Apps Script Web App은 자체 Google 인증 사용
+    // 실제로는 Apps Script가 로그인 처리 — 직접 API 호출 시 자동 리다이렉트
+    this.checkAuth();
+  },
+
+  async checkAuth() {
+    try {
+      const res = await this.api('getSpaces');
+      if (res.error === 'unauthorized') {
+        document.getElementById('login-error').style.display = 'block';
+        return;
+      }
+      // 인증 성공
+      const email = localStorage.getItem('user_email') || '';
+      this.state.user = { email };
+      document.getElementById('settings-email').textContent = email || '로그인됨';
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      this.state.spaces = res.spaces || [];
+      this.renderSpaceTabs();
+      this.renderAddSpaceGrid();
+      this.renderSettingsSpaces();
+      this.loadFeed();
+    } catch(e) {
+      // Apps Script 인증 리다이렉트 처리
+      window.location.href = API + '?action=getSpaces';
+    }
+  },
+
+  logout() {
+    localStorage.clear();
+    location.reload();
+  },
+
+  // ── API ───────────────────────────────
+
+  async api(action, params = {}) {
+    const url = new URL(API);
+    url.searchParams.set('action', action);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    const res = await fetch(url.toString(), { credentials: 'include' });
+    return res.json();
+  },
+
+  async apiPost(body) {
+    const res = await fetch(API, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return res.json();
+  },
+
+  // ── Navigation ────────────────────────
+
+  navigate(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('space-tabs').style.display = page === 'feed' ? 'flex' : 'none';
+
+    document.getElementById('page-' + page).classList.add('active');
+    const navBtn = document.getElementById('nav-' + page);
+    if (navBtn) navBtn.classList.add('active');
+
+    const titles = { feed: '우리집', add: '새로 올리기', summary: '합의 현황', settings: '설정' };
+    document.getElementById('header-title').textContent = titles[page] || '우리집';
+
+    this.state.currentPage = page;
+    if (page === 'summary') this.loadSummary();
+    if (page === 'settings') this.renderSettingsSpaces();
+    if (page === 'add') this.resetAddForm();
+  },
+
+  refresh() {
+    if (this.state.currentPage === 'feed') this.loadFeed();
+    if (this.state.currentPage === 'summary') this.loadSummary();
+  },
+
+  // ── Space Tabs ────────────────────────
+
+  renderSpaceTabs() {
+    const el = document.getElementById('space-tabs');
+    const all = `<button class="tab-btn active" onclick="App.selectSpace('all', this)">전체</button>`;
+    const tabs = this.state.spaces.map(s =>
+      `<button class="tab-btn" onclick="App.selectSpace('${s.space_id}', this)">${s.icon} ${s.name}</button>`
+    ).join('');
+    el.innerHTML = all + tabs;
+  },
+
+  selectSpace(id, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    this.state.currentSpace = id;
+    this.loadFeed();
+  },
+
+  // ── Feed ──────────────────────────────
+
+  async loadFeed() {
+    const el = document.getElementById('feed-list');
+    el.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+    try {
+      const params = this.state.currentSpace !== 'all' ? { space_id: this.state.currentSpace } : {};
+      const data = await this.api('getItems', params);
+      const items = data.items || [];
+
+      if (!items.length) {
+        el.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🏠</div>
+            <div class="empty-title">아직 올라온 게 없어요</div>
+            <div class="empty-desc">아래 + 버튼을 눌러서<br>첫 번째 레퍼런스를 올려보세요</div>
+          </div>`;
+        return;
+      }
+
+      // 반응 일괄 조회
+      const ids = items.map(i => i.item_id).join(',');
+      const reactData = await this.api('getReactions', { item_ids: ids });
+      const reactions = reactData.reactions || {};
+
+      el.innerHTML = items.map(item => this.renderCard(item, reactions[item.item_id] || {})).join('');
+    } catch(e) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-title">불러오기 실패</div><div class="empty-desc">새로고침 해주세요</div></div>';
+    }
+  },
+
+  renderCard(item, reaction) {
+    const space = this.state.spaces.find(s => s.space_id === item.space_id);
+    const spaceLabel = space ? `${space.icon} ${space.name}` : '';
+    const timeLabel = this.timeAgo(item.created_at);
+    const byLabel = item.created_by ? item.created_by.split('@')[0] : '';
+
+    let mediaHtml = '';
+    if (item.type === 'photo' && item.content_url) {
+      mediaHtml = `<img class="card-img" src="${item.content_url}" loading="lazy" onerror="this.style.display='none'">`;
+    } else if (item.type === 'link') {
+      if (item.thumbnail_url) {
+        mediaHtml = `<div class="card-link-thumb"><img src="${item.thumbnail_url}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'card-link-thumb-fallback\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.8\\'><path d=\\'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\\'/>\\</svg><span>링크 미리보기 없음</span></div>'"></div>`;
+      } else {
+        mediaHtml = `<div class="card-link-thumb-fallback">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>링크</span>
+        </div>`;
+      }
+    }
+
+    const mine = reaction.mine;
+    const loveActive = mine === 'love' ? 'love' : '';
+    const noActive   = mine === 'no'   ? 'no'   : '';
+    const holdActive = mine === 'hold' ? 'hold' : '';
+
+    const urlDisplay = item.type === 'link' && item.content_url
+      ? `<div class="card-link-url">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <a href="${item.content_url}" target="_blank" style="color:var(--text-tertiary);text-decoration:none;overflow:hidden;text-overflow:ellipsis">${new URL(item.content_url).hostname}</a>
+        </div>` : '';
+
+    return `
+      <div class="card" id="card-${item.item_id}">
+        ${mediaHtml}
+        <div class="card-body">
+          ${item.title ? `<div class="card-title">${item.title}</div>` : ''}
+          <div class="card-meta">
+            <span>${spaceLabel}</span>
+            <span class="card-meta-dot"></span>
+            <span>${byLabel}</span>
+            <span class="card-meta-dot"></span>
+            <span>${timeLabel}</span>
+          </div>
+          ${item.memo ? `<div class="card-memo">${item.memo}</div>` : ''}
+          ${urlDisplay}
+          <div class="reactions">
+            <button class="react-btn ${loveActive}" onclick="App.react('${item.item_id}', 'love', this)">❤️ ${reaction.love || 0}</button>
+            <button class="react-btn ${noActive}"   onclick="App.react('${item.item_id}', 'no', this)">❌ ${reaction.no || 0}</button>
+            <button class="react-btn ${holdActive}" onclick="App.react('${item.item_id}', 'hold', this)">🤔 ${reaction.hold || 0}</button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  // ── Reactions ─────────────────────────
+
+  async react(itemId, reaction, btn) {
+    const card = document.getElementById('card-' + itemId);
+    const btns = card.querySelectorAll('.react-btn');
+    const types = ['love', 'no', 'hold'];
+
+    // 현재 내 반응
+    const currentMine = [...btns].findIndex(b => b.classList.contains(types[0]) || b.classList.contains(types[1]) || b.classList.contains(types[2]));
+
+    // 낙관적 업데이트
+    btns.forEach((b, i) => {
+      b.classList.remove('love', 'no', 'hold');
+    });
+    btn.classList.add(reaction);
+
+    try {
+      await this.apiPost({ action: 'setReaction', item_id: itemId, reaction });
+      this.showToast(reaction === 'love' ? '❤️ 좋아요!' : reaction === 'no' ? '❌ 별로!' : '🤔 보류!');
+    } catch(e) {
+      this.showToast('반응 저장 실패');
+    }
+  },
+
+  // ── Add Item ──────────────────────────
+
+  resetAddForm() {
+    this.state.addType = 'photo';
+    this.state.addSpaceId = null;
+    this.state.photoBase64 = null;
+    this.state.photoName = null;
+
+    document.querySelectorAll('.type-btn').forEach((b, i) => {
+      b.classList.toggle('selected', i === 0);
+    });
+    document.getElementById('input-photo').style.display = 'block';
+    document.getElementById('input-link').style.display = 'none';
+    document.getElementById('photo-preview-wrap').innerHTML = '';
+    document.getElementById('upload-area').style.display = 'flex';
+    document.getElementById('link-url').value = '';
+    document.getElementById('add-memo').value = '';
+
+    document.querySelectorAll('.space-chip').forEach(c => c.classList.remove('selected'));
+  },
+
+  selectType(type, btn) {
+    this.state.addType = type;
+    document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('input-photo').style.display = type === 'photo' ? 'block' : 'none';
+    document.getElementById('input-link').style.display = type === 'link' ? 'block' : 'none';
+  },
+
+  renderAddSpaceGrid() {
+    const el = document.getElementById('add-space-grid');
+    el.innerHTML = this.state.spaces.map(s =>
+      `<button class="space-chip" onclick="App.selectAddSpace('${s.space_id}', this)">${s.icon} ${s.name}</button>`
+    ).join('');
+  },
+
+  selectAddSpace(id, btn) {
+    document.querySelectorAll('.space-chip').forEach(c => c.classList.remove('selected'));
+    btn.classList.add('selected');
+    this.state.addSpaceId = id;
+  },
+
+  onFileSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    this.state.photoName = file.name;
+
+    const canvas = document.createElement('canvas');
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = e => {
+      img.onload = () => {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const b64 = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+        this.state.photoBase64 = b64;
+
+        document.getElementById('photo-preview-wrap').innerHTML = `
+          <div class="preview-img-wrap">
+            <img class="preview-img" src="${e.target.result}">
+            <button class="preview-remove" onclick="App.removePhoto()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>`;
+        document.getElementById('upload-area').style.display = 'none';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  removePhoto() {
+    this.state.photoBase64 = null;
+    this.state.photoName = null;
+    document.getElementById('photo-preview-wrap').innerHTML = '';
+    document.getElementById('upload-area').style.display = 'flex';
+    document.getElementById('file-input').value = '';
+  },
+
+  async submitItem() {
+    if (!this.state.addSpaceId) { this.showToast('공간을 선택해주세요'); return; }
+
+    const type = this.state.addType;
+    const memo = document.getElementById('add-memo').value.trim();
+
+    if (type === 'photo' && !this.state.photoBase64) { this.showToast('사진을 선택해주세요'); return; }
+    if (type === 'link') {
+      const url = document.getElementById('link-url').value.trim();
+      if (!url) { this.showToast('URL을 입력해주세요'); return; }
+    }
+    if (type === 'memo' && !memo) { this.showToast('메모를 입력해주세요'); return; }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = '저장 중...';
+
+    try {
+      const body = {
+        action: 'addItem',
+        space_id: this.state.addSpaceId,
+        type,
+        memo
+      };
+
+      if (type === 'photo') {
+        body.image_base64 = this.state.photoBase64;
+        body.image_name = this.state.photoName || 'photo.jpg';
+      } else if (type === 'link') {
+        const url = document.getElementById('link-url').value.trim();
+        body.content_url = url;
+        body.title = new URL(url).hostname;
+      }
+
+      await this.apiPost(body);
+      this.showToast('저장했어요!');
+      this.navigate('feed');
+      this.loadFeed();
+    } catch(e) {
+      this.showToast('저장 실패. 다시 시도해주세요');
+    } finally {
+      btn.disabled = false; btn.textContent = '저장하기';
+    }
+  },
+
+  // ── Summary ───────────────────────────
+
+  async loadSummary() {
+    const el = document.getElementById('summary-list');
+    el.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+    try {
+      const data = await this.api('getSummary');
+      const summary = data.summary || [];
+      if (!summary.length) { el.innerHTML = '<div class="loading-wrap" style="padding:24px">데이터 없음</div>'; return; }
+
+      el.innerHTML = summary.map(s => {
+        const pct = s.rate || 0;
+        return `
+          <div class="summary-row">
+            <div class="summary-icon">${s.icon}</div>
+            <div class="summary-info">
+              <div class="summary-name">${s.name}</div>
+              <div class="summary-bar-bg"><div class="summary-bar-fill" style="width:${pct}%"></div></div>
+            </div>
+            <div class="summary-nums">
+              <div class="summary-agreed">❤️ ${s.agreed}</div>
+              <div class="summary-total">/ ${s.total}개</div>
+            </div>
+          </div>`;
+      }).join('');
+    } catch(e) {
+      el.innerHTML = '<div class="loading-wrap" style="padding:24px">불러오기 실패</div>';
+    }
+  },
+
+  // ── Settings / Space Management ───────
+
+  renderSettingsSpaces() {
+    const el = document.getElementById('settings-spaces-list');
+    el.innerHTML = this.state.spaces.map(s => `
+      <div class="settings-row">
+        <div class="settings-row-icon">${s.icon}</div>
+        <div class="settings-row-label">${s.name}</div>
+        <button class="settings-row-action" onclick="App.openEditSpaceModal('${s.space_id}')" aria-label="수정">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>`).join('');
+  },
+
+  openAddSpaceModal() {
+    this.state.editingSpace = null;
+    this.state.selectedEmoji = '🏠';
+    document.getElementById('space-modal-title').textContent = '새 공간 추가';
+    document.getElementById('space-name-input').value = '';
+    this.renderEmojiGrid();
+    document.getElementById('space-modal').classList.add('open');
+  },
+
+  openEditSpaceModal(spaceId) {
+    const space = this.state.spaces.find(s => s.space_id === spaceId);
+    if (!space) return;
+    this.state.editingSpace = spaceId;
+    this.state.selectedEmoji = space.icon;
+    document.getElementById('space-modal-title').textContent = '공간 수정';
+    document.getElementById('space-name-input').value = space.name;
+    this.renderEmojiGrid();
+    document.getElementById('space-modal').classList.add('open');
+  },
+
+  renderEmojiGrid() {
+    const el = document.getElementById('emoji-grid');
+    el.innerHTML = EMOJIS.map(e =>
+      `<button class="emoji-btn ${e === this.state.selectedEmoji ? 'selected' : ''}" onclick="App.selectEmoji('${e}', this)">${e}</button>`
+    ).join('');
+  },
+
+  selectEmoji(emoji, btn) {
+    document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    this.state.selectedEmoji = emoji;
+  },
+
+  async confirmSpace() {
+    const name = document.getElementById('space-name-input').value.trim();
+    if (!name) { this.showToast('이름을 입력해주세요'); return; }
+
+    try {
+      const body = {
+        action: 'saveSpace',
+        name,
+        icon: this.state.selectedEmoji
+      };
+      if (this.state.editingSpace) body.space_id = this.state.editingSpace;
+
+      const res = await this.apiPost(body);
+      this.closeModal();
+
+      // 로컬 spaces 업데이트
+      if (this.state.editingSpace) {
+        const idx = this.state.spaces.findIndex(s => s.space_id === this.state.editingSpace);
+        if (idx !== -1) { this.state.spaces[idx].name = name; this.state.spaces[idx].icon = this.state.selectedEmoji; }
+      } else {
+        this.state.spaces.push({ space_id: res.space_id, name, icon: this.state.selectedEmoji, order_index: this.state.spaces.length + 1 });
+      }
+
+      this.renderSpaceTabs();
+      this.renderAddSpaceGrid();
+      this.renderSettingsSpaces();
+      this.showToast(this.state.editingSpace ? '수정했어요!' : '추가했어요!');
+    } catch(e) {
+      this.showToast('저장 실패');
+    }
+  },
+
+  closeModal() {
+    document.getElementById('space-modal').classList.remove('open');
+  },
+
+  // ── Utilities ─────────────────────────
+
+  showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  },
+
+  timeAgo(iso) {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return '방금 전';
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}시간 전`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}일 전`;
+    return new Date(iso).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  }
+};
+
+// ── Init ───────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // 모달 오버레이 클릭 시 닫기
+  document.getElementById('space-modal').addEventListener('click', function(e) {
+    if (e.target === this) App.closeModal();
+  });
+
+  // 탭 초기 숨김
+  document.getElementById('space-tabs').style.display = 'flex';
+
+  // 인증 체크
+  App.checkAuth();
+});
+</script>
+
+<!-- Service Worker 등록 -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+
+</body>
+</html>
