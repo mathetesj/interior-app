@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="우리집">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="./manifest.json?v=2.0.1">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.0.1">
 <title>우리집 인테리어</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
@@ -724,6 +725,7 @@
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
+const APP_VERSION = '2.0.1';
 const PIN = '1234';
 const APP_PIN = '1234';
 const USERS = {
@@ -976,24 +978,49 @@ const App = {
   },
 
   async api(action, params = {}) {
-    const url = new URL(API);
-    url.searchParams.set('action', action);
-    url.searchParams.set('app_pin', APP_PIN);
-    if (this.state.user) url.searchParams.set('user_name', this.state.user.name);
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
-    });
+    return this.apiJsonp(action, params);
+  },
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25000);
-    try {
-      const res = await fetch(url.toString(), { cache: 'no-store', signal: controller.signal });
-      const json = await res.json();
-      if (!res.ok || json.ok === false || json.error) throw new Error(json.error || `HTTP ${res.status}`);
-      return json;
-    } finally {
-      clearTimeout(timer);
-    }
+  apiJsonp(action, params = {}) {
+    return new Promise((resolve, reject) => {
+      const callback = `__interiorJsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const url = new URL(API);
+      url.searchParams.set('action', action);
+      url.searchParams.set('app_pin', APP_PIN);
+      url.searchParams.set('callback', callback);
+      url.searchParams.set('_v', APP_VERSION);
+      if (this.state.user) url.searchParams.set('user_name', this.state.user.name);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
+      });
+
+      const script = document.createElement('script');
+      let settled = false;
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        delete window[callback];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('서버 응답 시간이 초과되었습니다. Apps Script 배포와 권한을 확인해주세요.'));
+      }, 25000);
+
+      window[callback] = (json) => {
+        cleanup();
+        if (!json || json.ok === false || json.error) reject(new Error((json && json.error) || 'API 응답 오류'));
+        else resolve(json);
+      };
+      script.onerror = () => {
+        cleanup();
+        reject(new Error('Apps Script 스크립트 로드 실패'));
+      };
+      script.async = true;
+      script.src = url.toString();
+      document.head.appendChild(script);
+    });
   },
 
   async apiPost(body) {
@@ -1001,21 +1028,70 @@ const App = {
       app_pin: APP_PIN,
       user_name: this.state.user ? this.state.user.name : ''
     });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 35000);
-    try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      const json = await res.json();
-      if (!res.ok || json.ok === false || json.error) throw new Error(json.error || `HTTP ${res.status}`);
-      return json;
-    } finally {
-      clearTimeout(timer);
-    }
+    return this.apiPostViaIframe(payload);
+  },
+
+  apiPostViaIframe(payload) {
+    return new Promise((resolve, reject) => {
+      const requestId = `post_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const iframeName = `interior_post_${requestId}`;
+      payload.request_id = requestId;
+
+      const iframe = document.createElement('iframe');
+      iframe.name = iframeName;
+      iframe.style.display = 'none';
+      iframe.setAttribute('title', 'hidden-api-frame');
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = API;
+      form.target = iframeName;
+      form.acceptCharset = 'UTF-8';
+      form.style.display = 'none';
+
+      const addField = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      };
+
+      addField('payload', JSON.stringify(payload));
+      addField('post_message', '1');
+      addField('target_origin', window.location.origin);
+      addField('request_id', requestId);
+
+      let settled = false;
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        window.removeEventListener('message', onMessage);
+        setTimeout(() => {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 0);
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('저장 응답 시간이 초과되었습니다. Apps Script 배포를 업데이트했는지 확인해주세요.'));
+      }, 45000);
+
+      const onMessage = (event) => {
+        const data = event.data;
+        if (!data || data.source !== 'interior-app-api' || data.request_id !== requestId) return;
+        cleanup();
+        const json = data.result;
+        if (!json || json.ok === false || json.error) reject(new Error((json && json.error) || '저장 API 응답 오류'));
+        else resolve(json);
+      };
+
+      window.addEventListener('message', onMessage);
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+      form.submit();
+    });
   },
 
   setSync(state) {
@@ -1710,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>
