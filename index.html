@@ -448,6 +448,30 @@
   .nav-add svg { width: 22px; height: 22px; }
 
   /* ── Modal / Sheet ── */
+  .photo-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 150;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .photo-modal.open { display: flex; }
+  .photo-modal img { max-width: 100%; max-height: 90vh; width: auto; height: auto; border-radius: 12px; }
+  .photo-modal-close {
+    position: absolute; top: 20px; right: 20px;
+    width: 40px; height: 40px;
+    background: rgba(255,255,255,0.2);
+    border: none; color: white;
+    font-size: 24px; font-weight: 600;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .photo-modal-close:active { background: rgba(255,255,255,0.3); }
+
   .modal-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.4); z-index: 100;
@@ -725,6 +749,12 @@
   </nav>
 </div>
 
+<!-- Photo Modal -->
+<div class="photo-modal" id="photo-modal" onclick="if(event.target === this) App.closePhotoModal()">
+  <img src="" alt="확대">
+  <button class="photo-modal-close" onclick="App.closePhotoModal()">✕</button>
+</div>
+
 <!-- Space Edit Modal -->
 <div class="modal-overlay" id="space-modal">
   <div class="modal-sheet">
@@ -999,7 +1029,12 @@ const App = {
 
     let mediaHtml = '';
     if (item.type === 'photo' && item.content_url) {
-      mediaHtml = `<img class="card-img" src="${item.content_url}" loading="lazy" onerror="this.style.display='none'">`;
+      // 사진: Drive URL에서 직접 표시 (CORS 우회)
+      const driveId = item.content_url.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+      const directUrl = driveId 
+        ? `https://lh3.google.com/d/${driveId}=w500` 
+        : item.content_url;
+      mediaHtml = `<img class="card-img" src="${directUrl}" loading="lazy" alt="사진" onclick="App.openPhotoModal('${directUrl}')" style="cursor:pointer">`;
     } else if (item.type === 'link') {
       if (item.thumbnail_url) {
         mediaHtml = `<div class="card-link-thumb"><img src="${item.thumbnail_url}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'card-link-thumb-fallback\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.8\\'><path d=\\'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\\'/>\\</svg><span>링크 미리보기 없음</span></div>'"></div>`;
@@ -1045,7 +1080,18 @@ const App = {
       </div>`;
   },
 
-  // ── Reactions ─────────────────────────
+  // ── Photo Modal ────────────────────────
+
+  openPhotoModal(url) {
+    const modal = document.getElementById('photo-modal');
+    const img = modal.querySelector('img');
+    img.src = url;
+    modal.classList.add('open');
+  },
+
+  closePhotoModal() {
+    document.getElementById('photo-modal').classList.remove('open');
+  },
 
   async react(itemId, reaction, btn) {
     const card = document.getElementById('card-' + itemId);
