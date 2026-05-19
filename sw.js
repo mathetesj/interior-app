@@ -1,35 +1,59 @@
-const CACHE = 'interior-app-v7';  // ← 수정할 때마다 여기만 올리면 됨
-const ASSETS = ['./index.html', './manifest.json'];
+const CACHE_NAME = 'interior-app-v2.0.0';
+const APP_SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS))
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', e => {
-  // API 요청은 캐시 안 함
-  if (e.request.url.includes('script.google.com')) return;
-
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      return cached || fetch(e.request).then(res => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      });
-    })
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL).catch(() => undefined))
+      .then(() => self.skipWaiting())
   );
 });
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  const url = new URL(req.url);
+
+  if (url.hostname.includes('script.google.com') || url.hostname.includes('script.googleusercontent.com')) {
+    event.respondWith(fetch(req));
+    return;
+  }
+
+  if (req.mode === 'navigate' || req.destination === 'document') {
+    event.respondWith(networkFirst(req, './index.html'));
+    return;
+  }
+
+  if (url.origin === self.location.origin) {
+    event.respondWith(staleWhileRevalidate(req));
+  }
+});
+
+async function networkFirst(request, fallbackUrl) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const fresh = await fetch(request);
+    if (fresh && fresh.ok) cache.put(request, fresh.clone());
+    return fresh;
+  } catch (err) {
+    const cached = await cache.match(request);
+    return cached || cache.match(fallbackUrl);
+  }
+}
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  const freshPromise = fetch(request).then(response => {
+    if (response && response.ok) cache.put(request, response.clone());
+    return response;
+  }).catch(() => cached);
+  return cached || freshPromise;
+}
