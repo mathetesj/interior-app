@@ -1,4 +1,4 @@
-const CACHE = 'interior-app-v1';
+const CACHE = 'interior-app-v7';  // ← 수정할 때마다 여기만 올리면 됨
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
