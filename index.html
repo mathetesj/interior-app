@@ -149,17 +149,42 @@
     border: 0.5px solid var(--border);
   }
 
-  .card-img {
-    width: 100%; aspect-ratio: 4/3;
-    object-fit: cover; display: block;
-    background: #ebebeb;
-  }
-  .card-img-placeholder {
-    width: 100%; aspect-ratio: 4/3;
+  .card-img-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
     background: #f0efec;
-    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: 1;
   }
-  .card-img-placeholder svg { width: 32px; height: 32px; color: #c0bfbb; }
+  .card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .card-img-loading {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, #f0efec 25%, #fafaf9 50%, #f0efec 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  .card-img-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: 20px;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
 
   .card-link-thumb {
     width: 100%; height: 140px;
@@ -1029,12 +1054,22 @@ const App = {
 
     let mediaHtml = '';
     if (item.type === 'photo' && item.content_url) {
-      // 사진: Drive URL에서 직접 표시 (CORS 우회)
-      const driveId = item.content_url.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
-      const directUrl = driveId 
-        ? `https://lh3.google.com/d/${driveId}=w500` 
-        : item.content_url;
-      mediaHtml = `<img class="card-img" src="${directUrl}" loading="lazy" alt="사진" onclick="App.openPhotoModal('${directUrl}')" style="cursor:pointer">`;
+      // Drive ID 추출
+      const match = item.content_url.match(/id=([a-zA-Z0-9_-]+)/);
+      const driveId = match ? match[1] : null;
+      
+      if (driveId) {
+        // Google Photos 호스팅 사용 (더 빠르고 CORS 친화적)
+        const photoUrl = `https://lh3.google.com/d/${driveId}=w500-h500-c`;
+        mediaHtml = `<div class="card-img-container" onclick="App.openPhotoModal('${photoUrl}')">
+          <img class="card-img" src="${photoUrl}" loading="lazy" alt="사진" 
+               onload="this.parentElement.style.opacity=1"
+               onerror="this.parentElement.innerHTML='<div class=\\'card-img-error\\'>사진을 불러올 수 없습니다</div>'">
+          <div class="card-img-loading"></div>
+        </div>`;
+      } else {
+        mediaHtml = `<div class="card-img-container"><div class="card-img-error">URL 오류</div></div>`;
+      }
     } else if (item.type === 'link') {
       if (item.thumbnail_url) {
         mediaHtml = `<div class="card-link-thumb"><img src="${item.thumbnail_url}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'card-link-thumb-fallback\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.8\\'><path d=\\'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\\'/>\\</svg><span>링크 미리보기 없음</span></div>'"></div>`;
