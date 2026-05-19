@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>우리집 인테리어 캐시 초기화</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans KR",sans-serif;background:#f7f3ed;color:#241c15;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:min(520px,100%);background:#fff;border:1px solid rgba(36,28,21,.1);border-radius:24px;padding:28px;box-shadow:0 16px 50px rgba(36,28,21,.08)}
+    h1{font-size:22px;margin:0 0 10px}p{line-height:1.65;color:#6e6257;margin:8px 0}.status{margin-top:18px;padding:14px 16px;background:#f7f3ed;border-radius:14px;font-weight:700}.log{white-space:pre-wrap;font-size:13px;margin-top:14px;color:#6e6257}.btn{display:inline-flex;margin-top:18px;padding:13px 16px;border-radius:14px;background:#241c15;color:white;text-decoration:none;font-weight:800;border:0;cursor:pointer}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>캐시 초기화 중입니다</h1>
+    <p>이 페이지는 예전 Service Worker와 Cache Storage를 삭제해서 새 앱 파일이 로드되도록 만듭니다.</p>
+    <div class="status" id="status">진행 중...</div>
+    <div class="log" id="log"></div>
+    <a class="btn" id="go" href="./index.html?v=203" style="display:none">앱 다시 열기</a>
+  </main>
+  <script>
+    const logEl=document.getElementById('log');
+    const statusEl=document.getElementById('status');
+    const goEl=document.getElementById('go');
+    const logs=[];
+    function log(msg){logs.push(msg);logEl.textContent=logs.join('\n');}
+    async function clearAll(){
+      try{
+        if('serviceWorker' in navigator){
+          const regs=await navigator.serviceWorker.getRegistrations();
+          log('Service Worker: '+regs.length+'개 발견');
+          await Promise.all(regs.map(r=>r.unregister()));
+          log('Service Worker 삭제 완료');
+        }else{log('Service Worker 미지원');}
+        if('caches' in window){
+          const keys=await caches.keys();
+          log('Cache Storage: '+keys.length+'개 발견');
+          await Promise.all(keys.map(k=>caches.delete(k)));
+          log('Cache Storage 삭제 완료');
+        }else{log('Cache Storage 미지원');}
+        statusEl.textContent='완료했습니다. 새 앱으로 이동합니다.';
+        goEl.style.display='inline-flex';
+        setTimeout(()=>{location.replace('./index.html?v=203');},1200);
+      }catch(err){
+        statusEl.textContent='자동 초기화 중 오류가 났습니다.';
+        log(String(err && err.message ? err.message : err));
+        goEl.style.display='inline-flex';
+      }
+    }
+    clearAll();
+  </script>
+</body>
+</html>
