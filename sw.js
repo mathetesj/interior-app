@@ -1,4 +1,4 @@
-const CACHE_NAME = 'interior-app-v2.0.0';
+const CACHE_NAME = 'interior-app-v2.0.1';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
@@ -21,25 +21,21 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
 
-  if (url.hostname.includes('script.google.com') || url.hostname.includes('script.googleusercontent.com')) {
-    event.respondWith(fetch(req));
-    return;
-  }
+  if (req.method !== 'GET') return;
+  if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate' || req.destination === 'document') {
     event.respondWith(networkFirst(req, './index.html'));
     return;
   }
 
-  if (url.origin === self.location.origin) {
-    event.respondWith(staleWhileRevalidate(req));
-  }
+  event.respondWith(staleWhileRevalidate(req));
 });
 
 async function networkFirst(request, fallbackUrl) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const fresh = await fetch(request);
+    const fresh = await fetch(request, { cache: 'no-store' });
     if (fresh && fresh.ok) cache.put(request, fresh.clone());
     return fresh;
   } catch (err) {
