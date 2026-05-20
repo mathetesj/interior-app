@@ -17,7 +17,7 @@
     <p>이 페이지는 예전 Service Worker와 Cache Storage를 삭제해서 새 앱 파일이 로드되도록 만듭니다.</p>
     <div class="status" id="status">진행 중...</div>
     <div class="log" id="log"></div>
-    <a class="btn" id="go" href="./index.html?v=203" style="display:none">앱 다시 열기</a>
+    <a class="btn" id="go" href="./index.html?v=2.0.6" style="display:none">앱 다시 열기</a>
   </main>
   <script>
     const logEl=document.getElementById('log');
@@ -41,7 +41,7 @@
         }else{log('Cache Storage 미지원');}
         statusEl.textContent='완료했습니다. 새 앱으로 이동합니다.';
         goEl.style.display='inline-flex';
-        setTimeout(()=>{location.replace('./index.html?v=203');},1200);
+        setTimeout(()=>{location.replace('./index.html?v=2.0.6');},1200);
       }catch(err){
         statusEl.textContent='자동 초기화 중 오류가 났습니다.';
         log(String(err && err.message ? err.message : err));
