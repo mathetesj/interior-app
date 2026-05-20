@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인테리어 앱 API 진단 v2.1.0</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans KR',system-ui,sans-serif;background:#f7f3ed;color:#211d19;margin:0;padding:22px;line-height:1.55}
+  .wrap{max-width:760px;margin:0 auto}
+  .card{background:#fffdf9;border:1px solid rgba(49,42,34,.12);border-radius:22px;padding:18px;margin:12px 0;box-shadow:0 12px 30px rgba(49,42,34,.06)}
+  h1{font-size:24px;margin:0 0 8px}
+  h2{font-size:17px;margin:0 0 8px}
+  .muted{color:#756d63;font-size:14px}
+  button,a.btn{display:inline-block;border:0;border-radius:14px;background:#2f2922;color:white;text-decoration:none;padding:11px 14px;font-weight:800;margin:6px 6px 6px 0;cursor:pointer}
+  .secondary{background:#eee4d5;color:#2f2922}
+  pre{white-space:pre-wrap;word-break:break-word;background:#211d19;color:#fff;border-radius:16px;padding:14px;font-size:13px;max-height:420px;overflow:auto}
+  .ok{color:#317b5f;font-weight:800}
+  .bad{color:#cf5b3f;font-weight:800}
+  .warn{color:#b58925;font-weight:800}
+  code{background:#eee4d5;border-radius:6px;padding:1px 5px;font-size:13px}
+  ol{padding-left:20px}
+  ol li{margin:6px 0}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eee4d5;font-size:11px;font-weight:800}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>API 진단 <span class="badge">v2.1.0</span></h1>
+  <p class="muted">여기서 ping/getBootstrap이 모두 통과하면 앱은 정상 작동해야 합니다.<br>실패하면 GitHub Pages 문제가 아니라 Apps Script 배포/권한/코드 문제입니다.</p>
+
+  <div class="card">
+    <h2>1) 자동 테스트</h2>
+    <div class="row">
+      <button onclick="runAll()">진단 다시 실행</button>
+      <a class="btn secondary" href="./clear-cache.html">캐시 초기화</a>
+      <a class="btn secondary" href="./index.html?v=2.1.0">앱으로 돌아가기</a>
+    </div>
+    <div id="status" class="muted" style="margin-top:10px">대기 중</div>
+    <pre id="log"></pre>
+  </div>
+
+  <div class="card">
+    <h2>2) 직접 열어볼 URL</h2>
+    <p class="muted">아래 링크를 새 탭에서 열었을 때 JSON 또는 콜백 코드가 아니라 Google 오류/로그인 화면이 보이면 웹 앱 배포가 잘못된 상태입니다.</p>
+    <p><a id="pinglink" target="_blank">ping 직접 열기</a> <span class="muted">(권한 없이도 응답해야 함)</span></p>
+    <p><a id="bootlink" target="_blank">bootstrap 직접 열기</a> <span class="muted">(PIN 포함)</span></p>
+    <p><a id="diaglink" target="_blank">diagnose 직접 열기</a> <span class="muted">(시트 행수 포함)</span></p>
+  </div>
+
+  <div class="card">
+    <h2>3) 문제별 체크리스트</h2>
+    <ol>
+      <li><b>ping 실패</b> → Apps Script 자체가 응답을 못 함. 다음 중 하나:
+        <ul>
+          <li><code>code.gs</code>가 v2.1.0 전체로 교체 안 됨</li>
+          <li><code>runSetupOnce</code> 실행 안 함 (권한 미승인)</li>
+          <li>배포 관리에서 <b>새 버전</b>으로 재배포 안 함</li>
+          <li>웹앱 액세스 권한이 <b>모든 사용자</b>가 아님</li>
+          <li><code>index.html</code>의 <code>API</code> 상수와 새 <code>/exec</code> URL이 다름</li>
+        </ul>
+      </li>
+      <li><b>ping 성공 / bootstrap 실패</b> → 권한 문제 (Spreadsheet/Drive)
+        <ul>
+          <li>Apps Script 편집기에서 <code>runSetupOnce</code> 다시 실행해서 권한 승인</li>
+        </ul>
+      </li>
+      <li><b>모두 성공인데 앱에서 저장이 안 됨</b> → POST 경로 문제 (드물게 발생):
+        <ul>
+          <li>아래 "POST 테스트" 버튼으로 별도 확인</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>4) POST 테스트</h2>
+    <p class="muted">실제로 데이터를 쓰지 않는 안전한 액션(<code>ensureDefaultSpaces</code>)을 POST로 호출합니다.</p>
+    <button onclick="runPost()">POST 테스트 실행</button>
+    <pre id="postlog"></pre>
+  </div>
+
+  <div class="card">
+    <h2>5) 정상 조건</h2>
+    <p>Apps Script의 <code>code.gs</code>를 v2.1.0으로 전체 교체하고, <code>runSetupOnce</code>를 한 번 실행한 뒤, 기존 웹 앱 배포에서 새 버전을 배포해야 합니다.</p>
+    <p>이 진단에서 <span class="ok">ping 성공</span> + <span class="ok">bootstrap 성공</span> + <span class="ok">POST 성공</span> 세 개가 다 표시되면 OK.</p>
+  </div>
+</div>
+
+<script>
+// ═════════════════════════════════════════════════════════════
+//  ⚠️ index.html의 API 상수와 같은 URL이어야 합니다.
+// ═════════════════════════════════════════════════════════════
+const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
+const APP_PIN = '1234';
+const USER = '홍대표';
+
+function $(id) { return document.getElementById(id); }
+function log(msg) { $('log').textContent += msg + '\n'; }
+function plog(msg) { $('postlog').textContent += msg + '\n'; }
+
+function jsonp(action, params = {}) {
+  return new Promise((resolve, reject) => {
+    const cb = '__apiCheck_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const url = new URL(API);
+    url.searchParams.set('action', action);
+    url.searchParams.set('callback', cb);
+    url.searchParams.set('_diag', '210');
+    url.searchParams.set('_t', Date.now());
+    if (action !== 'ping' && action !== 'health' && action !== 'version') {
+      url.searchParams.set('app_pin', APP_PIN);
+    }
+    url.searchParams.set('user_name', USER);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+    const script = document.createElement('script');
+    let done = false;
+    const timer = setTimeout(() => finish(() => reject(new Error('타임아웃: Apps Script가 25초 안에 응답하지 않았습니다.'))), 25000);
+    function finish(fn) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+      if (script.parentNode) script.remove();
+      fn && fn();
+    }
+    window[cb] = (data) => finish(() => {
+      if (data && data.ok !== false && !data.error) resolve(data);
+      else reject(new Error((data && data.error) || 'API 응답 오류'));
+    });
+    script.onerror = () => finish(() => reject(new Error('script load failed — Apps Script가 JavaScript가 아닌 오류 페이지를 반환했거나 접근 권한이 막혔습니다.')));
+    script.src = url.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function postIframe(body) {
+  return new Promise((resolve, reject) => {
+    const requestId = 'apicheck_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const iframeName = 'apicheck_frame_' + requestId;
+    const payload = Object.assign({}, body, { app_pin: APP_PIN, user_name: USER, request_id: requestId });
+
+    const iframe = document.createElement('iframe');
+    iframe.name = iframeName;
+    iframe.style.display = 'none';
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = API;
+    form.target = iframeName;
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.acceptCharset = 'UTF-8';
+    form.style.display = 'none';
+
+    const add = (n, v) => {
+      const i = document.createElement('input');
+      i.type = 'hidden';
+      i.name = n;
+      i.value = v;
+      form.appendChild(i);
+    };
+    add('payload', JSON.stringify(payload));
+    add('post_message', '1');
+    add('target_origin', window.location.origin || '*');
+    add('request_id', requestId);
+
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      setTimeout(() => {
+        if (form.parentNode) form.remove();
+        if (iframe.parentNode) iframe.remove();
+      }, 100);
+    };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('타임아웃: 45초 안에 POST 응답이 오지 않았습니다.')); }, 45000);
+    const onMsg = (e) => {
+      const d = e.data;
+      if (!d || d.source !== 'interior-app-api' || d.request_id !== requestId) return;
+      cleanup();
+      const json = d.result;
+      if (json && json.ok !== false && !json.error) resolve(json);
+      else reject(new Error((json && json.error) || 'POST 응답 오류'));
+    };
+    window.addEventListener('message', onMsg);
+    document.body.appendChild(iframe);
+    document.body.appendChild(form);
+    form.submit();
+  });
+}
+
+async function runAll() {
+  $('log').textContent = '';
+  $('status').innerHTML = '테스트 중...';
+
+  // 1) ping
+  try {
+    log('[1/3] ping 요청...');
+    const ping = await jsonp('ping');
+    log(JSON.stringify(ping, null, 2));
+    log('→ ping ✓');
+  } catch (e) {
+    $('status').innerHTML = '<span class="bad">ping 실패</span> — Apps Script가 응답하지 않습니다. 위의 "3) 문제별 체크리스트" 항목 1번을 확인하세요.';
+    log('ERROR: ' + e.message);
+    return;
+  }
+
+  // 2) getBootstrap
+  try {
+    log('\n[2/3] getBootstrap 요청...');
+    const boot = await jsonp('getBootstrap', { page_size: 5 });
+    log(JSON.stringify({
+      version: boot.version,
+      spaces_count: (boot.spaces || []).length,
+      spaces: (boot.spaces || []).map(s => s.name).join(', '),
+      items_count: (boot.items || []).length,
+      summary_count: (boot.summary || []).length,
+      totals: boot.totals || {}
+    }, null, 2));
+    log('→ getBootstrap ✓');
+  } catch (e) {
+    $('status').innerHTML = '<span class="bad">bootstrap 실패</span> — ping은 됐지만 시트 접근 권한 문제일 수 있습니다. 위의 항목 2번을 확인하세요.';
+    log('ERROR: ' + e.message);
+    return;
+  }
+
+  // 3) diagnose
+  try {
+    log('\n[3/3] diagnose 요청...');
+    const diag = await jsonp('diagnose');
+    log(JSON.stringify(diag, null, 2));
+    log('→ diagnose ✓');
+    $('status').innerHTML = '<span class="ok">✓ 정상 연결</span> — 앱이 정상 작동할 준비가 됐습니다. POST 테스트도 한 번 실행해보세요.';
+  } catch (e) {
+    $('status').innerHTML = '<span class="warn">부분 성공</span> — ping/bootstrap은 OK지만 diagnose는 실패. 사용에는 지장 없음.';
+    log('ERROR: ' + e.message);
+  }
+}
+
+async function runPost() {
+  $('postlog').textContent = '';
+  plog('POST 테스트 (ensureDefaultSpaces) 요청 중...');
+  try {
+    const res = await postIframe({ action: 'ensureDefaultSpaces' });
+    plog(JSON.stringify({
+      ok: res.ok,
+      spaces_count: (res.spaces || []).length,
+      spaces: (res.spaces || []).map(s => s.name).join(', ')
+    }, null, 2));
+    plog('\n→ POST ✓ 저장 경로가 정상 작동합니다.');
+  } catch (e) {
+    plog('ERROR: ' + e.message);
+    plog('\n→ POST 실패. ping/bootstrap은 통과해도 POST가 막힐 수 있습니다. Apps Script 배포 설정을 다시 확인하거나 새 배포 URL을 만들어보세요.');
+  }
+}
+
+(function () {
+  const ping = new URL(API);
+  ping.searchParams.set('action', 'ping');
+  ping.searchParams.set('callback', 'console.log');
+  const boot = new URL(API);
+  boot.searchParams.set('action', 'getBootstrap');
+  boot.searchParams.set('app_pin', APP_PIN);
+  boot.searchParams.set('callback', 'console.log');
+  boot.searchParams.set('user_name', USER);
+  const diag = new URL(API);
+  diag.searchParams.set('action', 'diagnose');
+  diag.searchParams.set('app_pin', APP_PIN);
+  diag.searchParams.set('callback', 'console.log');
+  diag.searchParams.set('user_name', USER);
+  $('pinglink').href = ping.toString();
+  $('bootlink').href = boot.toString();
+  $('diaglink').href = diag.toString();
+  runAll();
+})();
+</script>
+</body>
+</html>
