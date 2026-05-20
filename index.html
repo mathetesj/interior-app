@@ -4,13 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="우리집">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.0.1">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.0.1">
+<link rel="manifest" href="./manifest.json?v=2.0.6">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.0.6">
 <title>우리집 인테리어</title>
+<meta name="app-version" content="2.0.6">
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   * { -webkit-tap-highlight-color: transparent; }
@@ -327,6 +325,21 @@
   .empty-icon { font-size: 42px; }
   .empty h3, .error-box h3 { margin:0; color: var(--ink); font-size: 17px; }
   .empty p, .error-box p { margin:0; font-size: 14px; }
+
+  .inline-alert, .space-empty-box {
+    width:100%;
+    border: 1px dashed var(--line-strong);
+    background: #fffaf3;
+    border-radius: 16px;
+    padding: 14px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .inline-alert b, .space-empty-box b { color: var(--ink); }
+  .action-row { display:flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .action-row .secondary-btn { flex:0 1 auto; margin-top:0; padding: 10px 13px; border-radius: 14px; font-size: 13px; }
+  .debug-note { font-size: 12px; color: var(--faint); line-height: 1.45; margin-top: 8px; }
   .spinner {
     width: 28px;
     height: 28px;
@@ -674,6 +687,8 @@
         <div class="panel-title"><div><h2>공간 관리</h2><p>탭과 업자용 브리프에 표시될 공간입니다.</p></div></div>
         <div id="settings-spaces"></div>
         <button class="secondary-btn" type="button" data-action="open-space-modal" style="margin-top:12px">+ 새 공간 추가</button>
+        <button class="secondary-btn" type="button" data-action="repair-spaces" style="margin-top:12px">기본 공간 복구</button>
+        <button class="secondary-btn" type="button" data-action="diagnose" style="margin-top:12px">서버 진단</button>
       </div>
       <div class="panel">
         <div class="panel-title"><div><h2>계정</h2><p id="settings-user">로그인 정보</p></div></div>
@@ -725,13 +740,20 @@
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.0.6';
 const PIN = '1234';
 const APP_PIN = '1234';
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
 };
+const CLIENT_DEFAULT_SPACES = [
+  { space_id: 'sp_living', name: '거실', icon: '🛋', order_index: 1, is_active: true },
+  { space_id: 'sp_kitchen', name: '주방', icon: '🍳', order_index: 2, is_active: true },
+  { space_id: 'sp_bedroom', name: '침실', icon: '🛏', order_index: 3, is_active: true },
+  { space_id: 'sp_bath', name: '욕실', icon: '🚿', order_index: 4, is_active: true },
+  { space_id: 'sp_entry', name: '현관', icon: '🚪', order_index: 5, is_active: true }
+];
 const EMOJIS = ['🛋','🍳','🛏','🚿','🚪','📚','👗','🪴','🖼','💡','🛁','🪟','🏠','⭐','🎨','🪑','🛠','🧹','📦','🌿','🧺','🪞'];
 const CATEGORIES = [
   ['all', '전체'], ['mood', '무드'], ['layout', '구조'], ['color', '컬러'], ['lighting', '조명'],
@@ -773,7 +795,9 @@ const App = {
     photoName: null,
     selectedEmoji: '🏠',
     editingSpace: null,
-    requestSeq: 0
+    requestSeq: 0,
+    usingFallbackSpaces: false,
+    isLegacyApi: false
   },
 
   init() {
@@ -892,6 +916,11 @@ const App = {
       case 'print-brief': return window.print();
       case 'copy-brief': return this.copyBriefText();
       case 'open-space-modal': return this.openSpaceModal();
+      case 'edit-space': return this.openSpaceModal(btn.dataset.spaceEdit || null);
+      case 'repair-spaces': return this.repairSpaces(btn);
+      case 'restore-default-spaces': return this.repairSpaces(btn);
+      case 'diagnose': return this.diagnose();
+      case 'open-api-check': return window.open('./api-check.html?v=' + APP_VERSION, '_blank');
       case 'save-space': return this.saveSpace(btn);
       case 'close-modal': return this.closeModal();
       default: return null;
@@ -959,21 +988,148 @@ const App = {
 
   async initApp() {
     this.setSync('loading');
+    this.state.isLegacyApi = false;
     try {
-      const data = await this.api('getBootstrap', { page_size: 40 });
-      this.state.spaces = data.spaces || [];
-      this.state.items = data.items || [];
-      this.state.reactions = data.reactions || {};
-      this.state.summary = data.summary || [];
+      let data;
+      try {
+        data = await this.api('getBootstrap', { page_size: 40 });
+      } catch (primaryErr) {
+        data = await this.loadLegacyBootstrap(primaryErr);
+      }
+
+      this.applyBootstrapData(data);
       this.renderSpaces();
       this.renderFeed();
       this.renderSettingsSpaces();
       this.resetAddForm(false);
-      this.setSync('ok');
+      this.setSync(this.state.usingFallbackSpaces || this.state.isLegacyApi ? 'bad' : 'ok');
+
+      if (this.state.isLegacyApi) {
+        this.toast('구버전 Apps Script가 감지됐습니다. code.gs를 새 버전으로 배포해주세요.');
+      } else if (this.state.usingFallbackSpaces) {
+        this.toast('공간 목록을 기본값으로 임시 표시했습니다.');
+      }
     } catch (err) {
+      this.state.spaces = this.defaultSpaces();
+      this.state.items = [];
+      this.state.reactions = {};
+      this.state.summary = [];
+      this.state.usingFallbackSpaces = true;
+      this.renderSpaces();
+      this.renderFeed();
+      this.renderSettingsSpaces();
+      this.resetAddForm(false);
       this.setSync('bad');
-      this.el.feed.innerHTML = this.errorHtml('서버 연결 실패', err.message || 'Apps Script 배포와 권한을 확인해주세요.');
-      this.toast('서버 연결에 실패했습니다.');
+      this.el.feed.innerHTML = this.serverErrorHtml(err);
+      this.toast('서버 연결 실패. 기본 공간만 표시합니다.');
+    }
+  },
+
+  async loadLegacyBootstrap(primaryErr) {
+    try {
+      const [spacesData, feedData, summaryData] = await Promise.all([
+        this.apiJsonp('getSpaces', {}),
+        this.apiJsonp('getFeed', { page_size: 40 }).catch(() => ({ items: [], reactions: {} })),
+        this.apiJsonp('getSummary', {}).catch(() => ({ summary: [] }))
+      ]);
+      this.state.isLegacyApi = true;
+      return {
+        spaces: spacesData.spaces || [],
+        items: feedData.items || [],
+        reactions: feedData.reactions || {},
+        summary: summaryData.summary || []
+      };
+    } catch (legacyErr) {
+      throw primaryErr || legacyErr;
+    }
+  },
+
+  applyBootstrapData(data = {}) {
+    this.state.spaces = this.normalizeSpaces(data.spaces || []);
+    this.state.usingFallbackSpaces = false;
+    if (!this.state.spaces.length) {
+      this.state.spaces = this.defaultSpaces();
+      this.state.usingFallbackSpaces = true;
+      setTimeout(() => this.repairSpaces(null, true), 120);
+    }
+    if (this.state.currentSpace !== 'all' && !this.spaceById(this.state.currentSpace)) this.state.currentSpace = 'all';
+    this.state.items = Array.isArray(data.items) ? data.items : [];
+    this.state.reactions = data.reactions && typeof data.reactions === 'object' ? data.reactions : {};
+    this.state.summary = Array.isArray(data.summary) ? data.summary : [];
+  },
+
+  normalizeSpaces(spaces) {
+    const seen = new Set();
+    return (Array.isArray(spaces) ? spaces : [])
+      .map((space, index) => ({
+        space_id: String(space.space_id || '').trim(),
+        name: String(space.name || '').trim(),
+        icon: String(space.icon || '🏠').trim() || '🏠',
+        order_index: Number(space.order_index || index + 1),
+        is_active: true
+      }))
+      .filter(space => space.space_id && space.name)
+      .filter(space => {
+        if (seen.has(space.space_id)) return false;
+        seen.add(space.space_id);
+        return true;
+      })
+      .sort((a, b) => (a.order_index || 999) - (b.order_index || 999));
+  },
+
+  defaultSpaces() {
+    return CLIENT_DEFAULT_SPACES.map(space => Object.assign({}, space));
+  },
+
+  async repairSpaces(btn = null, silent = false) {
+    if (btn) btn.disabled = true;
+    if (!silent) this.toast('공간 목록을 복구하는 중입니다.');
+    try {
+      let data;
+      try {
+        data = await this.apiPost({ action: 'ensureDefaultSpaces' });
+      } catch (postErr) {
+        data = await this.api('ensureDefaultSpaces', {});
+      }
+      const spaces = this.normalizeSpaces(data.spaces || []);
+      this.state.spaces = spaces.length ? spaces : this.defaultSpaces();
+      this.state.usingFallbackSpaces = !spaces.length;
+      if (!this.state.addSpaceId || !this.spaceById(this.state.addSpaceId)) this.state.addSpaceId = this.state.spaces[0].space_id;
+      this.renderSpaces();
+      this.renderSettingsSpaces();
+      this.resetAddForm(false);
+      this.setSync(spaces.length ? 'ok' : 'bad');
+      if (!silent) this.toast(spaces.length ? '공간 목록을 복구했습니다.' : '기본 공간을 임시 표시합니다.');
+    } catch (err) {
+      this.state.spaces = this.defaultSpaces();
+      this.state.usingFallbackSpaces = true;
+      if (!this.state.addSpaceId) this.state.addSpaceId = this.state.spaces[0].space_id;
+      this.renderSpaces();
+      this.renderSettingsSpaces();
+      this.resetAddForm(false);
+      this.setSync('bad');
+      if (!silent) this.toast(err.message || '서버 복구 실패. 기본 공간을 임시 표시합니다.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  },
+
+  async diagnose() {
+    try {
+      const data = await this.api('diagnose', {});
+      const counts = data.counts || data.sheets || {};
+      alert([
+        '서버 진단 결과',
+        `버전: ${data.version || '알 수 없음'}`,
+        `공간 행: ${counts.spaces && counts.spaces.rows !== undefined ? counts.spaces.rows : (counts.spaces ?? '-')}`,
+        `항목 행: ${counts.items && counts.items.rows !== undefined ? counts.items.rows : (counts.items ?? '-')}`,
+        `반응 행: ${counts.reactions && counts.reactions.rows !== undefined ? counts.reactions.rows : (counts.reactions ?? '-')}`,
+        `현재 사용자: ${this.state.user ? this.state.user.name : '-'}`,
+        `레거시 모드: ${this.state.isLegacyApi ? '예' : '아니오'}`,
+        `기본 공간 임시 사용: ${this.state.usingFallbackSpaces ? '예' : '아니오'}`
+      ].join('\\n'));
+    } catch (err) {
+      alert('서버 진단 실패\n' + (err.message || err));
     }
   },
 
@@ -1015,7 +1171,7 @@ const App = {
       };
       script.onerror = () => {
         cleanup();
-        reject(new Error('Apps Script 스크립트 로드 실패'));
+        reject(new Error('Apps Script 스크립트 로드 실패: code.gs 전체 교체, runSetupOnce 실행, 웹 앱 새 버전 배포/접근 권한을 확인해주세요.'));
       };
       script.async = true;
       script.src = url.toString();
@@ -1131,6 +1287,8 @@ const App = {
   },
 
   renderSpaces() {
+    if (!Array.isArray(this.state.spaces)) this.state.spaces = [];
+    if (this.state.currentSpace !== 'all' && !this.spaceById(this.state.currentSpace)) this.state.currentSpace = 'all';
     const tabs = [
       `<button class="chip-btn ${this.state.currentSpace === 'all' ? 'active' : ''}" type="button" data-space="all">전체</button>`,
       ...this.state.spaces.map(space => `<button class="chip-btn ${this.state.currentSpace === space.space_id ? 'active' : ''}" type="button" data-space="${this.a(space.space_id)}">${this.h(space.icon)} ${this.h(space.name)}</button>`)
@@ -1343,6 +1501,20 @@ const App = {
   },
 
   renderAddSpaces() {
+    if (!this.state.spaces.length) {
+      this.el.addSpaceGrid.innerHTML = `
+        <div class="space-empty-box">
+          <b>공간 목록이 비어 있습니다.</b><br>
+          기본 공간을 복구하거나, 직접 공간을 추가한 뒤 저장해 주세요.
+          <div class="action-row">
+            <button class="secondary-btn" type="button" data-action="repair-spaces">기본 공간 복구</button>
+            <button class="secondary-btn" type="button" data-action="open-space-modal">공간 직접 추가</button>
+          </div>
+          <div class="debug-note">계속 비어 있으면 Apps Script의 code.gs가 최신 버전으로 배포되지 않았을 가능성이 큽니다.</div>
+        </div>`;
+      return;
+    }
+    if (!this.state.addSpaceId || !this.spaceById(this.state.addSpaceId)) this.state.addSpaceId = this.state.spaces[0].space_id;
     this.el.addSpaceGrid.innerHTML = this.state.spaces.map(space =>
       `<button class="chip-btn ${space.space_id === this.state.addSpaceId ? 'active' : ''}" type="button" data-add-space="${this.a(space.space_id)}">${this.h(space.icon)} ${this.h(space.name)}</button>`
     ).join('');
@@ -1420,7 +1592,16 @@ const App = {
   },
 
   async submitItem() {
-    if (!this.state.addSpaceId) return this.toast('공간을 선택해주세요.');
+    if (!this.state.spaces.length) {
+      this.state.spaces = this.defaultSpaces();
+      this.state.usingFallbackSpaces = true;
+      this.renderSpaces();
+    }
+    if (!this.state.addSpaceId && this.state.spaces[0]) {
+      this.state.addSpaceId = this.state.spaces[0].space_id;
+      this.renderAddSpaces();
+    }
+    if (!this.state.addSpaceId) return this.toast('공간을 선택하거나 기본 공간을 복구해주세요.');
     const type = this.state.addType;
     const submitBtn = document.getElementById('submit-btn');
     const title = document.getElementById('add-title').value.trim();
@@ -1638,11 +1819,14 @@ const App = {
         <div class="settings-icon">${this.h(space.icon)}</div>
         <div class="settings-label">${this.h(space.name)}<div class="settings-sub">${this.h(space.space_id)}</div></div>
         <button class="mini-btn" type="button" data-action="edit-space" data-space-edit="${this.a(space.space_id)}">수정</button>
-      </div>`).join('') : '<p class="card-text">공간이 없습니다.</p>';
-
-    this.el.settingsSpaces.querySelectorAll('[data-space-edit]').forEach(btn => {
-      btn.addEventListener('click', () => this.openSpaceModal(btn.dataset.spaceEdit));
-    });
+      </div>`).join('') : `
+      <div class="space-empty-box">
+        <b>공간 데이터가 비어 있습니다.</b><br>기본 공간을 다시 만들거나 새 공간을 추가하세요.
+        <div class="action-row">
+          <button class="secondary-btn" type="button" data-action="repair-spaces">기본 공간 복구</button>
+          <button class="secondary-btn" type="button" data-action="open-space-modal">새 공간 추가</button>
+        </div>
+      </div>`;
   },
 
   openSpaceModal(spaceId = null) {
@@ -1679,6 +1863,7 @@ const App = {
       } else {
         this.state.spaces.push({ space_id: res.space_id, name, icon: this.state.selectedEmoji, order_index: this.state.spaces.length + 1, is_active: true });
       }
+      this.state.usingFallbackSpaces = false;
       this.closeModal();
       this.renderSpaces();
       this.renderSettingsSpaces();
@@ -1764,6 +1949,20 @@ const App = {
     return new Date(ms).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' });
   },
 
+  serverErrorHtml(err) {
+    const desc = err && err.message ? err.message : 'Apps Script 배포와 권한을 확인해주세요.';
+    return `<div class="error-box">
+      <div class="empty-icon">⚠️</div>
+      <h3>서버 연결 실패</h3>
+      <p>${this.h(desc)}</p>
+      <div class="action-row" style="justify-content:center">
+        <button class="secondary-btn" type="button" data-action="open-api-check">API 진단 페이지</button>
+        <button class="secondary-btn" type="button" data-action="repair-spaces">기본 공간으로 계속</button>
+      </div>
+      <p class="debug-note">프론트는 기본 공간으로 계속 볼 수 있지만, 저장은 Apps Script가 정상 배포된 뒤 작동합니다.</p>
+    </div>`;
+  },
+
   errorHtml(title, desc) {
     return `<div class="error-box"><div class="empty-icon">⚠️</div><h3>${this.h(title)}</h3><p>${this.h(desc)}</p></div>`;
   },
@@ -1786,7 +1985,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=2.0.6', { scope: './', updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>
