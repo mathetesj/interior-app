@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.1.0">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.1.0">
+<link rel="manifest" href="./manifest.json?v=2.1.1">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.1.1">
 <title>우리집 인테리어</title>
-<meta name="app-version" content="2.1.0">
+<meta name="app-version" content="2.1.1">
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   * { -webkit-tap-highlight-color: transparent; }
@@ -184,7 +184,7 @@
     height:100%;
     overflow-y:auto;
     overflow-x:hidden;
-    padding: 14px 14px calc(var(--nav-h) + 20px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 14px calc(var(--nav-h) + 56px + env(safe-area-inset-bottom, 0px));
     -webkit-overflow-scrolling: touch;
   }
   .page.active { display:block; }
@@ -241,6 +241,9 @@
     box-shadow: 0 10px 28px rgba(49,42,34,.055);
   }
   .card-media { display:block; width:100%; background:#e8dfd2; position:relative; overflow:hidden; color: inherit; text-decoration:none; }
+  .card-media.saving img { filter: brightness(.7) blur(1px); }
+  .card-media-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(33,29,25,.18); pointer-events:none; }
+  .card-media-overlay .spinner { border-top-color:#fff; border-color:rgba(255,255,255,.35); border-top-color:#fff; width:32px; height:32px; }
   .card-media img { display:block; width:100%; aspect-ratio: 4 / 3; object-fit: cover; background:#e8dfd2; }
   .memo-hero, .link-hero {
     min-height: 132px;
@@ -490,15 +493,16 @@
     max-width: min(92vw, 430px);
     background: rgba(33,29,25,.94);
     color:white;
-    border-radius: 999px;
-    padding: 11px 17px;
+    border-radius: 18px;
+    padding: 12px 18px;
     font-size: 13px;
     font-weight: 850;
     opacity:0;
     pointer-events:none;
     transition: .22s ease;
     z-index: 60;
-    white-space: nowrap;
+    text-align: center;
+    line-height: 1.45;
   }
   .toast.show { opacity:1; transform: translateX(-50%) translateY(0); }
 
@@ -708,7 +712,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.1.0<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.1.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -758,7 +762,7 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.1.1';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -1230,7 +1234,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.1.0으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.1.1으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -1458,17 +1462,45 @@ const App = {
   },
 
   renderMedia(item, url, host) {
-    if (item.type === 'photo' && url) {
-      return `<a class="card-media" href="${this.a(url)}" target="_blank" rel="noopener"><img src="${this.a(url)}" alt="${this.a(item.title || '인테리어 레퍼런스')}" loading="lazy" onerror="this.style.opacity='.3';this.alt='이미지를 불러올 수 없습니다';"></a>`;
+    if (item.type === 'photo') {
+      // 미리보기는 thumbnail_url 우선 (서버가 lh3 또는 data URL로 보냄)
+      // content_url은 클릭 시 새 탭에서 원본 보기용
+      const thumb = this.safeUrl(item.thumbnail_url) || this.safeUrl(item.content_url);
+      const linkTarget = this.safeUrl(item.content_url) || thumb;
+      if (!thumb) return `<div class="memo-hero"><div class="hero-icon">📷</div><div class="hero-title">${this.h(item.title || '사진')}</div><div class="hero-sub">미리보기 없음</div></div>`;
+      // 이미지 로드 실패 시 다른 Drive endpoint로 폴백 (lh3 → thumbnail endpoint)
+      const fileId = this.extractDriveId(thumb) || this.extractDriveId(linkTarget);
+      const fallback = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200` : '';
+      const onerr = fallback
+        ? `if(this.dataset.fallbacked!=='1'){this.dataset.fallbacked='1';this.src='${this.a(fallback)}';}else{this.style.opacity='.25';this.alt='이미지를 불러올 수 없습니다';}`
+        : `this.style.opacity='.25';this.alt='이미지를 불러올 수 없습니다';`;
+      const savingClass = item._saving ? ' saving' : '';
+      const savingOverlay = item._saving ? '<div class="card-media-overlay"><div class="spinner"></div></div>' : '';
+      return `<a class="card-media${savingClass}" href="${this.a(linkTarget)}" target="_blank" rel="noopener"><img src="${this.a(thumb)}" alt="${this.a(item.title || '인테리어 레퍼런스')}" loading="lazy" referrerpolicy="no-referrer" onerror="${onerr}">${savingOverlay}</a>`;
     }
     if (item.type === 'link') {
       const thumb = this.safeUrl(item.thumbnail_url);
       if (thumb) {
-        return `<a class="card-media" href="${this.a(url)}" target="_blank" rel="noopener"><img src="${this.a(thumb)}" alt="${this.a(item.title || '링크 미리보기')}" loading="lazy" onerror="this.parentNode.outerHTML='&lt;a class=&quot;card-media link-hero&quot; href=&quot;${this.a(url)}&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;&lt;div class=&quot;hero-icon&quot;&gt;🔗&lt;/div&gt;&lt;div class=&quot;hero-title&quot;&gt;${this.a(item.title || '링크 레퍼런스')}&lt;/div&gt;&lt;div class=&quot;hero-sub&quot;&gt;${this.a(host || '링크')}&lt;/div&gt;&lt;/a&gt;'"></a>`;
+        return `<a class="card-media" href="${this.a(url)}" target="_blank" rel="noopener"><img src="${this.a(thumb)}" alt="${this.a(item.title || '링크 미리보기')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('link-hero');this.style.display='none';"></a>`;
       }
       return `<a class="card-media link-hero" href="${this.a(url || '#')}" target="_blank" rel="noopener"><div class="hero-icon">🔗</div><div class="hero-title">${this.h(item.title || '링크 레퍼런스')}</div><div class="hero-sub">${this.h(host || '링크')}</div></a>`;
     }
     return `<div class="memo-hero"><div class="hero-icon">📝</div><div class="hero-title">메모 레퍼런스</div><div class="hero-sub">사진 없이 아이디어만 기록했습니다.</div></div>`;
+  },
+
+  extractDriveId(url) {
+    const s = String(url || '');
+    const patterns = [
+      /[?&]id=([A-Za-z0-9_-]{20,})/,
+      /\/file\/d\/([A-Za-z0-9_-]{20,})/,
+      /lh3\.googleusercontent\.com\/d\/([A-Za-z0-9_-]{20,})/,
+      /\/d\/([A-Za-z0-9_-]{20,})/
+    ];
+    for (const p of patterns) {
+      const m = s.match(p);
+      if (m) return m[1];
+    }
+    return '';
   },
 
   reactionButton(itemId, type, icon, reaction) {
@@ -1672,6 +1704,10 @@ const App = {
     const memo = document.getElementById('add-memo').value.trim();
     const whyGood = document.getElementById('why-good').value.trim();
     const caution = document.getElementById('caution').value.trim();
+    const category = document.getElementById('add-category').value;
+    const priority = document.getElementById('add-priority').value;
+    const briefStatus = document.getElementById('add-status').value;
+    const tags = document.getElementById('add-tags').value.trim();
 
     const body = {
       action: 'addItem',
@@ -1679,18 +1715,22 @@ const App = {
       type,
       title,
       memo,
-      category: document.getElementById('add-category').value,
-      priority: document.getElementById('add-priority').value,
-      brief_status: document.getElementById('add-status').value,
-      tags: document.getElementById('add-tags').value.trim(),
+      category,
+      priority,
+      brief_status: briefStatus,
+      tags,
       why_good: whyGood,
       caution
     };
 
+    // 클라이언트 검증 + body 완성
+    let optimisticPreview = null; // 카드에 즉시 보여줄 base64 데이터 URL
     if (type === 'photo') {
       if (!this.state.photoBase64) return this.toast('사진을 선택해주세요.');
       body.image_base64 = this.state.photoBase64;
       body.image_name = this.state.photoName || 'photo.jpg';
+      // 사진은 업로드까지 시간이 걸리니 base64로 즉시 미리보기 (mobile은 작아서 OK)
+      optimisticPreview = 'data:image/jpeg;base64,' + this.state.photoBase64;
     }
     if (type === 'link') {
       const url = this.normalizeInputUrl(document.getElementById('link-url').value.trim());
@@ -1700,17 +1740,53 @@ const App = {
     }
     if (type === 'memo' && !memo && !whyGood && !caution) return this.toast('메모 내용을 입력해주세요.');
 
+    // ── Optimistic UI: 즉시 보드로 이동 + 임시 카드 추가 ──
+    const tempId = 'temp_' + Date.now();
+    const tempItem = {
+      item_id: tempId,
+      space_id: body.space_id,
+      type,
+      content_url: type === 'link' ? body.content_url : (optimisticPreview || ''),
+      thumbnail_url: optimisticPreview || '',
+      title: body.title || this.defaultTitle({ type }),
+      memo,
+      created_by: this.state.user ? this.state.user.name : '',
+      created_at: new Date().toISOString(),
+      category,
+      category_label: this.categoryLabel(category),
+      tags,
+      why_good: whyGood,
+      caution,
+      priority,
+      brief_status: briefStatus,
+      _saving: true
+    };
+    this.state.items.unshift(tempItem);
+    this.state.reactions[tempId] = this.emptyReaction();
+
+    this.resetAddForm(true);
+    this.navigate('board');
+    this.renderFeed();
+    this.toast(type === 'photo' ? '사진 업로드 중...' : '저장 중...');
+    this.setSync('loading');
     submitBtn.disabled = true;
     submitBtn.textContent = '저장 중...';
+
     try {
-      await this.apiPost(body);
-      this.toast('저장했습니다.');
-      this.resetAddForm(true);
-      this.navigate('board');
+      const res = await this.apiPost(body);
+      // 성공: 임시 카드 제거하고 서버 데이터로 새로고침
+      this.state.items = this.state.items.filter(i => i.item_id !== tempId);
+      delete this.state.reactions[tempId];
+      this.toast('저장 완료 ✓');
+      this.setSync('ok');
       await this.loadFeed();
     } catch (err) {
-      this.toast(err.message || '저장 실패');
+      // 실패: 임시 카드 제거하고 명확하게 알림
+      this.state.items = this.state.items.filter(i => i.item_id !== tempId);
+      delete this.state.reactions[tempId];
+      this.renderFeed();
       this.setSync('bad');
+      this.toast('저장 실패: ' + (err.message ? err.message.split('\n')[0] : '잠시 후 다시 시도해주세요.'));
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = '저장하기';
@@ -1815,12 +1891,24 @@ const App = {
   },
 
   briefItemHtml(item) {
-    const thumb = this.safeUrl(item.thumbnail_url || item.content_url);
-    const img = thumb && item.type === 'photo' ? `<img src="${this.a(thumb)}" alt="">` : (item.type === 'link' ? '🔗' : '📝');
+    const thumb = this.safeUrl(item.thumbnail_url) || this.safeUrl(item.content_url);
     const url = this.safeUrl(item.content_url);
     const host = url ? this.urlHost(url) : '';
+    let thumbHtml = '';
+    if (item.type === 'photo' && thumb) {
+      const fileId = this.extractDriveId(thumb);
+      const fallback = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w400` : '';
+      const onerr = fallback
+        ? `if(this.dataset.fallbacked!=='1'){this.dataset.fallbacked='1';this.src='${this.a(fallback)}';}else{this.style.opacity='.25';}`
+        : `this.style.opacity='.25';`;
+      thumbHtml = `<img src="${this.a(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="${onerr}">`;
+    } else if (item.type === 'link') {
+      thumbHtml = '🔗';
+    } else {
+      thumbHtml = '📝';
+    }
     return `<div class="brief-item">
-      <div class="brief-thumb">${typeof img === 'string' && img.startsWith('<img') ? img : this.h(img)}</div>
+      <div class="brief-thumb">${thumbHtml.startsWith('<img') ? thumbHtml : this.h(thumbHtml)}</div>
       <div>
         <div class="brief-item-title">${this.h(item.title || this.defaultTitle(item))}</div>
         <div class="brief-item-meta">${this.h(item.category_label || this.categoryLabel(item.category))}${host ? ` · ${this.h(host)}` : ''}${item.priority ? ` · 우선순위 ${this.h(PRIORITY_META[item.priority] || item.priority)}` : ''}</div>
@@ -1990,6 +2078,8 @@ const App = {
 
   safeUrl(raw) {
     if (!raw) return '';
+    // optimistic 사진 미리보기를 위한 data:image/ URL 허용
+    if (/^data:image\//i.test(raw)) return raw;
     try {
       const url = new URL(raw);
       if (!['http:', 'https:'].includes(url.protocol)) return '';
@@ -2037,7 +2127,7 @@ const App = {
       <p>${this.h(firstLine)}</p>
       <p class="debug-note">발생 위치: ${this.h(stage)}</p>
       <ol class="debug-steps">
-        <li>Apps Script 편집기에서 <code>code.gs</code> 전체를 v2.1.0으로 교체</li>
+        <li>Apps Script 편집기에서 <code>code.gs</code> 전체를 v2.1.1으로 교체</li>
         <li><code>runSetupOnce</code> 실행 후 권한 승인</li>
         <li><b>배포 관리 → 새 버전</b>으로 재배포 (액세스 권한: <b>모든 사용자</b>)</li>
         <li>받은 <code>/exec</code> URL을 <code>index.html</code> 상단 <code>API</code> 상수와 동일하게 유지</li>
@@ -2056,11 +2146,13 @@ const App = {
     return `<div class="error-box"><div class="empty-icon">⚠️</div><h3>${this.h(title)}</h3><p>${this.h(desc)}</p></div>`;
   },
 
-  toast(msg) {
+  toast(msg, duration) {
     this.el.toast.textContent = msg;
     this.el.toast.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.el.toast.classList.remove('show'), 2200);
+    // 명시되지 않으면 메시지 길이에 따라 자동 (짧으면 2.2초, 길면 4초)
+    const d = duration || (msg.length > 30 ? 4000 : 2400);
+    this.toastTimer = setTimeout(() => this.el.toast.classList.remove('show'), d);
   },
 
   h(value) {
@@ -2074,7 +2166,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=2.1.0', { scope: './', updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=2.1.1', { scope: './', updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>
