@@ -1572,7 +1572,7 @@ const App = {
             ${this.reactionButton(item.item_id, 'love', '❤️', reaction)}
             ${this.reactionButton(item.item_id, 'no', '❌', reaction)}
             ${this.reactionButton(item.item_id, 'hold', '🤔', reaction)}
-            <button class="reaction-btn comment-btn" type="button" data-comment-item="${this.a(item.item_id)}">💬 <span class="comment-count">${this.state.commentCounts[item.item_id] || ''}</span></button>
+            <button class="reaction-btn comment-btn" type="button" onclick="App.openComments('${this.a(item.item_id)}')">💬 <span class="comment-count">${this.state.commentCounts[item.item_id] || ''}</span></button>
           </div>
           <div class="card-actions">
             ${statusBtns}
