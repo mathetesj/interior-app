@@ -179,7 +179,7 @@
   .chip-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 
   .pages { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-  .page { max-height: 100vh; overflow-y: auto;
+  .page {
     display:none;
     height:100%;
     overflow-y:auto;
@@ -517,7 +517,7 @@
     #login-screen, .topbar, .space-tabs-wrap, .bottom-nav, .brief-actions, .toast, .modal { display:none !important; }
     #app { display:block !important; height:auto; max-width:none; box-shadow:none; background:#fff; }
     .pages { height:auto; overflow:visible; }
-    .page { max-height: 100vh; overflow-y: auto; display:none !important; height:auto; overflow:visible; padding:0; }
+    .page { display:none !important; height:auto; overflow:visible; padding:0; }
     .page.active { display:block !important; }
     #page-brief { display:block !important; }
     .brief-doc { border:0; box-shadow:none; border-radius:0; padding:0; }
