@@ -179,7 +179,7 @@
   .chip-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 
   .pages { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-  .page {
+  .page { max-height: 100vh; overflow-y: auto;
     display:none;
     height:100%;
     overflow-y:auto;
@@ -346,6 +346,20 @@
   .debug-steps { text-align:left; max-width: 380px; margin: 6px auto 4px; font-size: 12.5px; color: var(--muted); line-height: 1.6; padding-left: 22px; }
   .debug-steps li { margin: 3px 0; }
   .debug-steps code { background:#eee4d5; border-radius:5px; padding: 1px 5px; font-size: 11.5px; }
+
+  /* 댓글 */
+  .comment-list { max-height: 320px; overflow-y: auto; margin-bottom: 10px; }
+  .comment-bubble { background: #f3ece2; border-radius: 16px; padding: 10px 14px; margin: 6px 0; }
+  .comment-bubble.mine { background: #e8dfd2; margin-left: 32px; }
+  .comment-bubble.theirs { margin-right: 32px; }
+  .comment-author { font-size: 12px; font-weight: 850; color: var(--muted); margin-bottom: 2px; }
+  .comment-text { font-size: 14px; line-height: 1.5; }
+  .comment-time { font-size: 11px; color: var(--faint); margin-top: 3px; }
+  .comment-input-row { display: flex; gap: 8px; align-items: center; }
+  .comment-input-row .input { flex: 1; }
+  .comment-send-btn { white-space: nowrap; padding: 12px 16px !important; min-width: auto; }
+  .comment-btn .comment-count { font-size: 12px; margin-left: 1px; }
+  .muted-text { color: var(--faint); font-size: 13px; text-align: center; padding: 16px 0; }
   .spinner {
     width: 28px;
     height: 28px;
@@ -517,7 +531,7 @@
     #login-screen, .topbar, .space-tabs-wrap, .bottom-nav, .brief-actions, .toast, .modal { display:none !important; }
     #app { display:block !important; height:auto; max-width:none; box-shadow:none; background:#fff; }
     .pages { height:auto; overflow:visible; }
-    .page { display:none !important; height:auto; overflow:visible; padding:0; }
+    .page { max-height: 100vh; overflow-y: auto; display:none !important; height:auto; overflow:visible; padding:0; }
     .page.active { display:block !important; }
     #page-brief { display:block !important; }
     .brief-doc { border:0; box-shadow:none; border-radius:0; padding:0; }
@@ -633,7 +647,7 @@
             <span>사진 선택하기</span>
             <small>자동으로 압축해서 업로드합니다.</small>
           </label>
-          <input class="hidden" id="file-input" type="file" accept="image/*" capture="environment">
+          <input class="hidden" id="file-input" type="file" accept="image/*">
         </div>
 
         <div class="form-section hidden" id="link-section">
@@ -753,6 +767,19 @@
   </div>
 </div>
 
+<div class="modal" id="comment-modal" role="dialog" aria-modal="true" aria-labelledby="comment-modal-title">
+  <div class="sheet">
+    <div class="handle"></div>
+    <h3 id="comment-modal-title">💬 댓글</h3>
+    <div id="comment-list" class="comment-list"><p class="muted-text">댓글을 불러오는 중...</p></div>
+    <div class="comment-input-row">
+      <input class="input" id="comment-input" type="text" maxlength="500" placeholder="댓글 입력...">
+      <button class="primary-btn comment-send-btn" type="button" id="comment-send-btn">전송</button>
+    </div>
+    <button class="secondary-btn" type="button" data-action="close-modal" style="margin-top:8px">닫기</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -813,6 +840,7 @@ const App = {
     query: '',
     items: [],
     reactions: {},
+    commentCounts: {},
     summary: [],
     brief: null,
     addType: 'photo',
@@ -901,6 +929,9 @@ const App = {
       const del = e.target.closest('[data-delete-item]');
       if (del) return this.deleteItem(del.dataset.deleteItem);
 
+      const commentBtn = e.target.closest('[data-comment-item]');
+      if (commentBtn) return this.openComments(commentBtn.dataset.commentItem);
+
       const emoji = e.target.closest('[data-emoji]');
       if (emoji) return this.selectEmoji(emoji.dataset.emoji);
     });
@@ -930,6 +961,14 @@ const App = {
     });
     this.el.modal.addEventListener('click', (e) => {
       if (e.target === this.el.modal) this.closeModal();
+    });
+    const commentModal = document.getElementById('comment-modal');
+    commentModal.addEventListener('click', (e) => {
+      if (e.target === commentModal) this.closeCommentModal();
+    });
+    document.getElementById('comment-send-btn').addEventListener('click', () => this.sendComment());
+    document.getElementById('comment-input').addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') this.sendComment();
     });
   },
 
@@ -1009,6 +1048,7 @@ const App = {
 
   logout() {
     localStorage.removeItem('interior_user_key');
+    localStorage.removeItem('interior_cache');
     location.reload();
   },
 
@@ -1016,55 +1056,58 @@ const App = {
     this.setSync('loading');
     this.state.isLegacyApi = false;
 
-    // 1단계: ping으로 서버 살아있는지 확인 (PIN 없이 호출 가능)
-    let serverInfo = null;
+    // ── 캐시 우선 렌더링: 이전 데이터가 있으면 즉시 표시 ──
+    let hadCache = false;
     try {
-      serverInfo = await this.apiJsonp('ping');
-      this.state.serverVersion = serverInfo.version || null;
-      this.updateServerVersionLabel(serverInfo);
-    } catch (pingErr) {
-      // ping이 실패하면 무조건 Apps Script 배포 문제. 안내 화면.
-      this.state.spaces = this.defaultSpaces();
-      this.state.items = [];
-      this.state.reactions = {};
-      this.state.summary = [];
-      this.state.usingFallbackSpaces = true;
-      this.renderSpaces();
-      this.renderFeed();
-      this.renderSettingsSpaces();
-      this.resetAddForm(false);
-      this.setSync('bad');
-      this.el.feed.innerHTML = this.serverErrorHtml(pingErr, 'ping');
-      this.toast('서버 연결 실패. 기본 공간만 표시합니다.');
-      return;
-    }
+      const cached = localStorage.getItem('interior_cache');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && data.spaces && data.spaces.length) {
+          this.applyBootstrapData(data);
+          this.renderSpaces();
+          this.renderFeed();
+          this.renderSettingsSpaces();
+          this.resetAddForm(false);
+          hadCache = true;
+        }
+      }
+    } catch (e) { /* 캐시 파싱 실패 무시 */ }
 
-    // 2단계: bootstrap으로 실제 데이터 로드
+    // ── 서버 로드 (백그라운드) ──
     try {
       const data = await this.api('getBootstrap', { page_size: 40 });
+      // 캐시 저장
+      try { localStorage.setItem('interior_cache', JSON.stringify(data)); } catch (e) {}
       this.applyBootstrapData(data);
+      this.state.serverVersion = data.version || null;
       this.renderSpaces();
       this.renderFeed();
       this.renderSettingsSpaces();
       this.resetAddForm(false);
       this.setSync(this.state.usingFallbackSpaces ? 'bad' : 'ok');
-
       if (this.state.usingFallbackSpaces) {
         this.toast('공간 목록을 기본값으로 임시 표시했습니다.');
       }
     } catch (err) {
-      this.state.spaces = this.defaultSpaces();
-      this.state.items = [];
-      this.state.reactions = {};
-      this.state.summary = [];
-      this.state.usingFallbackSpaces = true;
-      this.renderSpaces();
-      this.renderFeed();
-      this.renderSettingsSpaces();
-      this.resetAddForm(false);
-      this.setSync('bad');
-      this.el.feed.innerHTML = this.serverErrorHtml(err, 'getBootstrap');
-      this.toast('서버 데이터 불러오기 실패. 기본 공간만 표시합니다.');
+      if (hadCache) {
+        // 캐시가 있었으면 오프라인 모드로 운영
+        this.setSync('bad');
+        this.toast('서버 연결 실패. 이전 데이터를 표시합니다.');
+      } else {
+        this.state.spaces = this.defaultSpaces();
+        this.state.items = [];
+        this.state.reactions = {};
+        this.state.commentCounts = {};
+        this.state.summary = [];
+        this.state.usingFallbackSpaces = true;
+        this.renderSpaces();
+        this.renderFeed();
+        this.renderSettingsSpaces();
+        this.resetAddForm(false);
+        this.setSync('bad');
+        this.el.feed.innerHTML = this.serverErrorHtml(err, 'getBootstrap');
+        this.toast('서버 연결 실패. 기본 공간만 표시합니다.');
+      }
     }
   },
 
@@ -1085,6 +1128,7 @@ const App = {
     if (this.state.currentSpace !== 'all' && !this.spaceById(this.state.currentSpace)) this.state.currentSpace = 'all';
     this.state.items = Array.isArray(data.items) ? data.items : [];
     this.state.reactions = data.reactions && typeof data.reactions === 'object' ? data.reactions : {};
+    this.state.commentCounts = data.comment_counts && typeof data.comment_counts === 'object' ? data.comment_counts : {};
     this.state.summary = Array.isArray(data.summary) ? data.summary : [];
   },
 
@@ -1169,6 +1213,82 @@ const App = {
     } catch (err) {
       alert('서버 진단 실패\n\n' + (err.message || err) + '\n\n→ "API 진단 페이지" 버튼으로 추가 확인할 수 있습니다.');
     }
+  },
+
+  // ── 댓글 기능 ──
+
+  async openComments(itemId) {
+    this.state.commentItemId = itemId;
+    const modal = document.getElementById('comment-modal');
+    const list = document.getElementById('comment-list');
+    const input = document.getElementById('comment-input');
+    modal.classList.add('active');
+    list.innerHTML = '<p class="muted-text">댓글을 불러오는 중...</p>';
+    input.value = '';
+    try {
+      const data = await this.api('getComments', { item_id: itemId });
+      this.renderComments(data.comments || []);
+    } catch (err) {
+      list.innerHTML = '<p class="muted-text">댓글을 불러오지 못했습니다.</p>';
+    }
+    setTimeout(() => input.focus(), 200);
+  },
+
+  renderComments(comments) {
+    const list = document.getElementById('comment-list');
+    const myName = this.state.user ? this.state.user.name : '';
+    if (!comments.length) {
+      list.innerHTML = '<p class="muted-text">아직 댓글이 없어요. 첫 댓글을 남겨보세요!</p>';
+      return;
+    }
+    list.innerHTML = comments.map(c => {
+      const isMine = c.user_name === myName;
+      return `<div class="comment-bubble ${isMine ? 'mine' : 'theirs'}">
+        <div class="comment-author">${this.h(c.user_name)}</div>
+        <div class="comment-text">${this.h(c.text)}</div>
+        <div class="comment-time">${this.h(this.timeAgo(c.created_at))}</div>
+      </div>`;
+    }).join('');
+    list.scrollTop = list.scrollHeight;
+  },
+
+  async sendComment() {
+    const input = document.getElementById('comment-input');
+    const text = input.value.trim();
+    if (!text) return;
+    if (!this.state.commentItemId) return;
+    const sendBtn = document.getElementById('comment-send-btn');
+    sendBtn.disabled = true;
+    input.disabled = true;
+    try {
+      await this.apiPost({
+        action: 'addComment',
+        item_id: this.state.commentItemId,
+        text: text
+      });
+      input.value = '';
+      // 댓글 수 업데이트
+      const id = this.state.commentItemId;
+      this.state.commentCounts[id] = (this.state.commentCounts[id] || 0) + 1;
+      // 카드의 댓글 카운트 업데이트
+      const countEl = document.querySelector(`[data-comment-item="${id}"] .comment-count`);
+      if (countEl) countEl.textContent = this.state.commentCounts[id];
+      // 댓글 다시 로드
+      const data = await this.api('getComments', { item_id: id });
+      this.renderComments(data.comments || []);
+      this.toast('댓글을 남겼습니다.');
+    } catch (err) {
+      this.toast('댓글 전송 실패: ' + (err.message || ''));
+    } finally {
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  },
+
+  closeCommentModal() {
+    document.getElementById('comment-modal').classList.remove('active');
+    this.state.commentItemId = null;
   },
 
   async api(action, params = {}) {
@@ -1452,6 +1572,7 @@ const App = {
             ${this.reactionButton(item.item_id, 'love', '❤️', reaction)}
             ${this.reactionButton(item.item_id, 'no', '❌', reaction)}
             ${this.reactionButton(item.item_id, 'hold', '🤔', reaction)}
+            <button class="reaction-btn comment-btn" type="button" data-comment-item="${this.a(item.item_id)}">💬 <span class="comment-count">${this.state.commentCounts[item.item_id] || ''}</span></button>
           </div>
           <div class="card-actions">
             ${statusBtns}
@@ -1651,6 +1772,10 @@ const App = {
 
   compressImage(file) {
     return new Promise((resolve, reject) => {
+      // 최대 5MB까지만 허용
+      if (file.size > 5 * 1024 * 1024) {
+        return reject(new Error('사진 크기가 5MB를 초과합니다. 더 작은 사진을 선택해주세요.'));
+      }
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.'));
       reader.onload = () => {
@@ -2040,6 +2165,7 @@ const App = {
 
   closeModal() {
     this.el.modal.classList.remove('open');
+    this.closeCommentModal();
   },
 
   emptyReaction() {
