@@ -1,1 +1,4 @@
-{"version":"2.3.0","build":"cache-safe-online-first"}
+{
+  "version": "2.3.1",
+  "notes": "Fast initial loading: skip heavy summary on bootstrap and render shell immediately."
+}

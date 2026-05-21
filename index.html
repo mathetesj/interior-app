@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.3.0">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.3.0">
+<link rel="manifest" href="./manifest.json?v=2.3.1">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.3.1">
 <title>우리집 인테리어</title>
 <meta name="app-version" content="2.2.0">
 <style>
@@ -736,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.3.0<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.3.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -803,7 +803,7 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.3.1';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -1083,6 +1083,16 @@ const App = {
     this.setSync('loading');
     this.state.isLegacyApi = false;
 
+    // 첫 화면은 서버를 기다리지 않고 즉시 그립니다.
+    // 네트워크 데이터는 뒤에서 조용히 교체합니다.
+    if (!this.state.spaces.length) {
+      this.state.spaces = this.defaultSpaces();
+      this.state.usingFallbackSpaces = true;
+      this.renderSpaces();
+      this.renderSettingsSpaces();
+      this.resetAddForm(false);
+    }
+
     // ── 캐시 우선 렌더링: 이전 데이터가 있으면 즉시 표시 ──
     let hadCache = false;
     try {
@@ -1102,7 +1112,7 @@ const App = {
 
     // ── 서버 로드 (백그라운드) ──
     try {
-      const data = await this.api('getBootstrap', { page_size: 40 });
+      const data = await this.api('getBootstrap', { page_size: 12, include_summary: '0' });
       // 캐시 저장
       try { localStorage.setItem('interior_cache', JSON.stringify(data)); } catch (e) {}
       this.applyBootstrapData(data);
@@ -1110,7 +1120,7 @@ const App = {
       this.renderSpaces();
       this.renderFeed();
       this.renderSettingsSpaces();
-      this.resetAddForm(false);
+      if (this.state.currentPage !== 'add') this.resetAddForm(false);
       this.setSync(this.state.usingFallbackSpaces ? 'bad' : 'ok');
       if (this.state.usingFallbackSpaces) {
         this.toast('공간 목록을 기본값으로 임시 표시했습니다.');
@@ -1713,7 +1723,7 @@ const App = {
     this.el.feed.innerHTML = '<div class="loading"><div class="spinner"></div><p>불러오는 중입니다</p></div>';
     this.setSync('loading');
     try {
-      const params = { page_size: 40 };
+      const params = { page_size: 18 };
       if (this.state.currentSpace !== 'all') params.space_id = this.state.currentSpace;
       if (this.state.statusFilter !== 'all') params.status = this.state.statusFilter;
       if (this.state.categoryFilter !== 'all') params.category = this.state.categoryFilter;
