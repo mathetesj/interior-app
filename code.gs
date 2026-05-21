@@ -1,10 +1,10 @@
 // ============================================
-// 우리집 인테리어 — Apps Script API v2.2.0 (photo upload hardening)
+// 우리집 인테리어 — Apps Script API v2.2.1 (chunked photo upload)
 // GitHub Pages + Apps Script + Spreadsheet/Drive 구조 유지형 안정화 버전
 // ============================================
 
 var INTERIOR_CONFIG_206 = {
-  APP_VERSION: '2.2.0',
+  APP_VERSION: '2.2.1',
   SHEET_ID: '1rl9c7gPZ6egDOKTmzTPxOYXf0Z1uoYaJJawGVf3v0UE',
   APP_PIN: '1234',
   REQUIRE_PIN: true,
@@ -13,7 +13,7 @@ var INTERIOR_CONFIG_206 = {
   MAX_PAGE_SIZE: 80,
   UPLOAD_TTL_SECONDS: 1800,
   UPLOAD_CHUNK_CHAR_SIZE: 18000,
-  MAX_UPLOAD_CHUNKS: 80,
+  MAX_UPLOAD_CHUNKS: 120,
   MAX_BASE64_CHARS: 1200000,
   USERS: ['홍대표', '아내']
 };
@@ -1215,13 +1215,8 @@ function hostnameFromUrl_(url) {
 function runSetupOnce() {
   ensureAllSheets_();
   ensureDefaultSpacesData_();
-  // 사진 업로드 권한을 배포 전에 확실히 승인받기 위해 DriveApp을 실제로 호출합니다.
-  var folderId = getOrCreateFolder_('setup');
-  var folder = DriveApp.getFolderById(folderId);
-  var diag = diagnoseData_();
-  diag.drive_setup_folder_id = folderId;
-  diag.drive_setup_folder_name = folder.getName();
-  return diag;
+  getOrCreateFolder_('diagnose');
+  return diagnoseData_();
 }
 
 

@@ -1,4 +1,4 @@
-const CACHE = 'interior-app-v2.2.0';
+const CACHE = 'interior-app-v2.2.1';
 const LOCAL_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {

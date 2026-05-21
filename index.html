@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.2.0">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.0">
+<link rel="manifest" href="./manifest.json?v=2.2.1">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.1">
 <title>우리집 인테리어</title>
 <meta name="app-version" content="2.2.0">
 <style>
@@ -736,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.2.0<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.2.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -803,7 +803,7 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.2.1';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -1405,7 +1405,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.2.0으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.2.1으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -2429,7 +2429,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=2.2.0', { scope: './', updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=2.2.1', { scope: './', updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>
