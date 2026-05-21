@@ -808,7 +808,7 @@ const APP_PIN = '1234';
 
 // 네트워크 타임아웃 (ms)
 const JSONP_TIMEOUT_MS = 30000;
-const POST_TIMEOUT_MS = 30000;
+const POST_TIMEOUT_MS = 45000;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
@@ -1455,8 +1455,6 @@ const App = {
       form.action = API;
       form.target = iframeName;
       form.acceptCharset = 'UTF-8';
-      // 명시적 enctype - 일부 환경에서 form 기본값이 multipart로 잡혀 Apps Script가 거부하는 케이스 방지
-      form.enctype = 'application/x-www-form-urlencoded';
       form.style.display = 'none';
 
       const addField = (name, value) => {
@@ -1946,68 +1944,22 @@ const App = {
     }
     if (type === 'memo' && !memo && !whyGood && !caution) return this.toast('메모 내용을 입력해주세요.');
 
-    // ── Optimistic UI: 즉시 보드로 이동 + 임시 카드 추가 ──
-    const tempId = 'temp_' + Date.now();
-    const tempItem = {
-      item_id: tempId,
-      space_id: body.space_id,
-      type,
-      content_url: type === 'link' ? body.content_url : (optimisticPreview || ''),
-      thumbnail_url: optimisticPreview || '',
-      title: body.title || this.defaultTitle({ type }),
-      memo,
-      created_by: this.state.user ? this.state.user.name : '',
-      created_at: new Date().toISOString(),
-      category,
-      category_label: this.categoryLabel(category),
-      tags,
-      why_good: whyGood,
-      caution,
-      priority,
-      brief_status: briefStatus,
-      _saving: true
-    };
-    this.state.items.unshift(tempItem);
-    this.state.reactions[tempId] = this.emptyReaction();
-
-    this.resetAddForm(true);
-    this.navigate('board');
-    this.renderFeed();
-    this.toast(type === 'photo' ? '사진 업로드 중...' : '저장 중...');
-    this.setSync('loading');
     submitBtn.disabled = true;
     submitBtn.textContent = '저장 중...';
 
     try {
-      // POST를 보냄 (서버는 처리하지만 iframe 응답은 못 받을 수 있음)
-      // postMessage 응답을 기다리지 않고, 일정 시간 후 피드를 리로드해서 확인
-      const postPromise = this.apiPost(body).catch(() => null); // 타임아웃/실패 무시
-
-      // 사진은 서버 처리가 길어서 더 기다림
-      const waitSec = type === 'photo' ? 8 : 4;
-      this.toast(type === 'photo' ? `사진 업로드 중... (약 ${waitSec}초)` : '저장 중...');
-
-      // postPromise가 먼저 끝나면 좋고, 아니면 타이머로 진행
-      await Promise.race([
-        postPromise,
-        new Promise(r => setTimeout(r, waitSec * 1000))
-      ]);
-
-      // 임시 카드 제거
-      this.state.items = this.state.items.filter(i => i.item_id !== tempId);
-      delete this.state.reactions[tempId];
-      try { localStorage.removeItem('interior_cache'); } catch (e) {}
-
-      // 피드 리로드로 실제 저장 여부 확인
-      await this.loadFeed();
+      await this.apiPost(body);
       this.toast('저장 완료 ✓');
+      try { localStorage.removeItem('interior_cache'); } catch (e) {}
+      this.resetAddForm(true);
+      this.navigate('board');
       this.setSync('ok');
+      await this.loadFeed();
     } catch (err) {
-      this.state.items = this.state.items.filter(i => i.item_id !== tempId);
-      delete this.state.reactions[tempId];
-      this.renderFeed();
+      try { localStorage.removeItem('interior_cache'); } catch (e) {}
+      try { await this.loadFeed(); } catch (e2) {}
       this.setSync('bad');
-      this.toast('저장 실패: ' + (err.message ? err.message.split('\n')[0] : '잠시 후 다시 시도해주세요.'));
+      this.toast('저장 응답이 지연됐습니다. 보드를 확인해주세요.');
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = '저장하기';
