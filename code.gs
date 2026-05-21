@@ -1,10 +1,10 @@
 // ============================================
-// 우리집 인테리어 — Apps Script API v2.1.2 (chunked photo upload)
+// 우리집 인테리어 — Apps Script API v2.2.0 (photo upload hardening)
 // GitHub Pages + Apps Script + Spreadsheet/Drive 구조 유지형 안정화 버전
 // ============================================
 
 var INTERIOR_CONFIG_206 = {
-  APP_VERSION: '2.1.2',
+  APP_VERSION: '2.2.0',
   SHEET_ID: '1rl9c7gPZ6egDOKTmzTPxOYXf0Z1uoYaJJawGVf3v0UE',
   APP_PIN: '1234',
   REQUIRE_PIN: true,
@@ -12,9 +12,9 @@ var INTERIOR_CONFIG_206 = {
   DEFAULT_PAGE_SIZE: 40,
   MAX_PAGE_SIZE: 80,
   UPLOAD_TTL_SECONDS: 1800,
-  UPLOAD_CHUNK_CHAR_SIZE: 30000,
-  MAX_UPLOAD_CHUNKS: 120,
-  MAX_BASE64_CHARS: 5400000,
+  UPLOAD_CHUNK_CHAR_SIZE: 18000,
+  MAX_UPLOAD_CHUNKS: 80,
+  MAX_BASE64_CHARS: 1200000,
   USERS: ['홍대표', '아내']
 };
 
@@ -124,6 +124,7 @@ function doPost(e) {
       case 'uploadPhotoChunk':  data = uploadPhotoChunkData_(body, user); break;
       case 'finishPhotoUpload': data = withLock_(function () { return finishPhotoUploadData_(body, user); }); break;
       case 'cancelPhotoUpload': data = cancelPhotoUploadData_(body, user); break;
+      case 'driveDiagnose': data = withLock_(function () { return driveDiagnoseData_(); }); break;
       case 'setReaction': data = withLock_(function () { return setReactionData_(body, user); }); break;
       case 'updateItem':  data = withLock_(function () { return updateItemData_(body, user); }); break;
       case 'addComment':  data = withLock_(function () { return addCommentData_(body, user); }); break;
@@ -998,6 +999,24 @@ function updateObjectRow_(name, rowNumber, fields) {
   range.setValues([values]);
 }
 
+
+function driveDiagnoseData_() {
+  ensureAllSheets_();
+  var folderId = getOrCreateFolder_('diagnose');
+  var folder = DriveApp.getFolderById(folderId);
+  var testFile = folder.createFile(Utilities.newBlob('ok ' + new Date().toISOString(), 'text/plain', 'interior_upload_test.txt'));
+  var fileId = testFile.getId();
+  testFile.setTrashed(true);
+  return {
+    version: INTERIOR_CONFIG_206.APP_VERSION,
+    folder_id: folderId,
+    folder_name: folder.getName(),
+    test_file_id: fileId,
+    test_file_created: true,
+    test_file_trashed: true
+  };
+}
+
 // ── Drive 업로드 ─────────────────────────────
 
 function uploadToDrive_(base64Data, fileName, spaceId) {
@@ -1196,7 +1215,13 @@ function hostnameFromUrl_(url) {
 function runSetupOnce() {
   ensureAllSheets_();
   ensureDefaultSpacesData_();
-  return diagnoseData_();
+  // 사진 업로드 권한을 배포 전에 확실히 승인받기 위해 DriveApp을 실제로 호출합니다.
+  var folderId = getOrCreateFolder_('setup');
+  var folder = DriveApp.getFolderById(folderId);
+  var diag = diagnoseData_();
+  diag.drive_setup_folder_id = folderId;
+  diag.drive_setup_folder_name = folder.getName();
+  return diag;
 }
 
 

@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.1.2">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.1.2">
+<link rel="manifest" href="./manifest.json?v=2.2.0">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.0">
 <title>우리집 인테리어</title>
-<meta name="app-version" content="2.1.2">
+<meta name="app-version" content="2.2.0">
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   * { -webkit-tap-highlight-color: transparent; }
@@ -721,6 +721,7 @@
         <button class="secondary-btn" type="button" data-action="open-space-modal" style="margin-top:12px">+ 새 공간 추가</button>
         <button class="secondary-btn" type="button" data-action="repair-spaces" style="margin-top:12px">기본 공간 복구</button>
         <button class="secondary-btn" type="button" data-action="diagnose" style="margin-top:12px">서버 진단</button>
+        <button class="secondary-btn" type="button" data-action="drive-diagnose" style="margin-top:12px">Drive 업로드 권한 진단</button>
         <button class="secondary-btn" type="button" data-action="open-api-check" style="margin-top:12px">API 진단 페이지</button>
       </div>
       <div class="panel">
@@ -735,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.1.2<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.2.0<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -802,16 +803,16 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.1.2';
+const APP_VERSION = '2.2.0';
 const PIN = '1234';
 const APP_PIN = '1234';
 
 // 네트워크 타임아웃 (ms)
 const JSONP_TIMEOUT_MS = 30000;
-const POST_TIMEOUT_MS = 45000;
+const POST_TIMEOUT_MS = 120000;
 // 사진은 base64를 한 번에 보내면 Apps Script/iframe POST가 자주 실패하므로 작은 조각으로 나눠 전송합니다.
-const PHOTO_UPLOAD_CHUNK_SIZE = 30000;
-const PHOTO_UPLOAD_MAX_CHUNKS = 120;
+const PHOTO_UPLOAD_CHUNK_SIZE = 18000;
+const PHOTO_UPLOAD_MAX_CHUNKS = 80;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
@@ -1009,6 +1010,7 @@ const App = {
       case 'repair-spaces': return this.repairSpaces(btn);
       case 'restore-default-spaces': return this.repairSpaces(btn);
       case 'diagnose': return this.diagnose();
+      case 'drive-diagnose': return this.driveDiagnose();
       case 'open-api-check': return window.open('./api-check.html?v=' + APP_VERSION, '_blank');
       case 'save-space': return this.saveSpace(btn);
       case 'close-modal': return this.closeModal();
@@ -1239,6 +1241,27 @@ const App = {
     }
   },
 
+
+  async driveDiagnose() {
+    this.toast('Drive 권한을 확인하는 중...');
+    try {
+      const data = await this.apiPost({ action: 'driveDiagnose' });
+      alert([
+        'Drive 업로드 권한 진단',
+        '',
+        `서버 버전: ${data.version || '-'}`,
+        `Drive 폴더: ${data.folder_name || '-'}`,
+        `폴더 ID: ${data.folder_id || '-'}`,
+        `테스트 파일 생성: ${data.test_file_created ? '성공' : '실패'}`,
+        `테스트 파일 삭제: ${data.test_file_trashed ? '성공' : '실패'}`,
+        '',
+        '이 진단이 성공하면 Drive 경로/권한 문제는 아닙니다.'
+      ].join('\n'));
+    } catch (err) {
+      alert('Drive 권한 진단 실패\n\n' + (err.message || err) + '\n\nApps Script에서 runSetupOnce를 다시 실행하고 새 버전 배포를 확인해주세요.');
+    }
+  },
+
   // ── 댓글 기능 ──
 
   async openComments(itemId) {
@@ -1382,7 +1405,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.1.2으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.2.0으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -1471,7 +1494,7 @@ const App = {
 
       addField('payload', JSON.stringify(payload));
       addField('post_message', '1');
-      addField('target_origin', window.location.origin || '*');
+      addField('target_origin', '*');
       addField('request_id', requestId);
 
       let settled = false;
@@ -1863,8 +1886,9 @@ const App = {
         const img = new Image();
         img.onerror = () => reject(new Error('사진을 불러오지 못했습니다.'));
         img.onload = () => {
-          // 모바일 카드 미리보기 용도 — 1000px이면 충분
-          const max = 1000;
+          // Apps Script + iframe POST 환경에서는 사진을 작고 확실하게 보내는 것이 안정적입니다.
+          // 인테리어 레퍼런스 공유용: 긴 변 760px, JPEG 0.52로 고정 압축합니다.
+          const max = 760;
           let { width, height } = img;
           if (width > max || height > max) {
             if (width >= height) { height = Math.round(height * max / width); width = max; }
@@ -1873,13 +1897,13 @@ const App = {
           const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext('2d', { alpha: false });
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
-          // 65% JPEG — 파일 크기 대폭 절감, 모바일에서 충분한 품질
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.52);
           const base64 = dataUrl.split(',')[1];
-          // base64 200KB 이내면 URL 인코딩 후에도 ~600KB — iframe POST로 빠르게 전송 가능
-          if (base64.length > 4000000) return reject(new Error('사진이 아직 큽니다. 더 작은 사진을 선택해주세요.'));
+          if (base64.length > 1200000) return reject(new Error('압축 후에도 사진이 큽니다. 스크린샷/작은 사진으로 다시 시도해주세요.'));
           resolve({ base64, preview: dataUrl, name: file.name.replace(/\.[^.]+$/, '') + '.jpg' });
         };
         img.src = reader.result;
@@ -1983,7 +2007,7 @@ const App = {
 
     let uploadId = '';
     try {
-      submitBtn.textContent = '업로드 준비 중...';
+      submitBtn.textContent = '업로드 세션 생성 중...';
       const beginBody = Object.assign({}, baseBody, {
         action: 'beginPhotoUpload',
         image_name: imageName || 'photo.jpg',
@@ -2008,7 +2032,7 @@ const App = {
         }, 2);
       }
 
-      submitBtn.textContent = 'Drive 저장 중...';
+      submitBtn.textContent = 'Drive 권한 확인/저장 중...';
       return await this.apiPostWithRetry({ action: 'finishPhotoUpload', upload_id: uploadId }, 1);
     } catch (err) {
       if (uploadId) {
@@ -2405,7 +2429,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=2.1.2', { scope: './', updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=2.2.0', { scope: './', updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>

@@ -1,4 +1,4 @@
-# 우리집 인테리어 v2.1.2 - 사진 업로드 복구 패치
+# 우리집 인테리어 v2.2.0 - 사진 업로드 복구 패치
 
 ## 핵심 변경
 
@@ -13,7 +13,7 @@
 2. 저장 후 `runSetupOnce`를 한 번 실행해 권한을 승인합니다.
 3. 배포 관리에서 기존 웹 앱을 수정하고 `새 버전`으로 배포합니다. 접근 권한은 `Anyone`으로 둡니다.
 4. GitHub Pages repo 루트에 `index.html`, `manifest.json`, `sw.js`, `clear-cache.html`, `api-check.html`, `icon-192.png`, `icon-512.png`를 업로드합니다.
-5. `https://mathetesj.github.io/interior-app/clear-cache.html`을 한 번 연 뒤 `?v=2.1.2`로 앱을 엽니다.
+5. `https://mathetesj.github.io/interior-app/clear-cache.html`을 한 번 연 뒤 `?v=2.2.0`로 앱을 엽니다.
 
 ## 테스트 순서
 
