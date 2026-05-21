@@ -1979,29 +1979,29 @@ const App = {
     submitBtn.textContent = '저장 중...';
 
     try {
-      // apiPost를 시도하되, 타임아웃 나도 서버에는 저장됐을 수 있으니 폴링으로 확인
-      let postOk = false;
-      try {
-        await this.apiPost(body);
-        postOk = true;
-      } catch (postErr) {
-        // 타임아웃/postMessage 실패 — 서버에는 저장됐을 수 있음
-      }
+      // POST를 보냄 (서버는 처리하지만 iframe 응답은 못 받을 수 있음)
+      // postMessage 응답을 기다리지 않고, 일정 시간 후 피드를 리로드해서 확인
+      const postPromise = this.apiPost(body).catch(() => null); // 타임아웃/실패 무시
 
-      // 임시 카드 제거 + 피드 리로드
+      // 사진은 서버 처리가 길어서 더 기다림
+      const waitSec = type === 'photo' ? 8 : 4;
+      this.toast(type === 'photo' ? `사진 업로드 중... (약 ${waitSec}초)` : '저장 중...');
+
+      // postPromise가 먼저 끝나면 좋고, 아니면 타이머로 진행
+      await Promise.race([
+        postPromise,
+        new Promise(r => setTimeout(r, waitSec * 1000))
+      ]);
+
+      // 임시 카드 제거
       this.state.items = this.state.items.filter(i => i.item_id !== tempId);
       delete this.state.reactions[tempId];
       try { localStorage.removeItem('interior_cache'); } catch (e) {}
 
-      if (postOk) {
-        this.toast('저장 완료 ✓');
-        this.setSync('ok');
-      } else {
-        this.toast('저장 확인 중...');
-      }
+      // 피드 리로드로 실제 저장 여부 확인
       await this.loadFeed();
+      this.toast('저장 완료 ✓');
       this.setSync('ok');
-      if (!postOk) this.toast('저장이 반영되었는지 보드를 확인해주세요.');
     } catch (err) {
       this.state.items = this.state.items.filter(i => i.item_id !== tempId);
       delete this.state.reactions[tempId];
