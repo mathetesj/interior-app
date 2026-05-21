@@ -46,6 +46,8 @@
     --radius-sm: 11px;
     --nav-h: 74px;
     --top-h: 64px;
+    --app-height: 100dvh;
+    --bottom-safe: max(env(safe-area-inset-bottom, 0px), var(--browser-bottom-pad, 0px));
     --shadow: 0 16px 40px rgba(49,42,34,.08);
     --max-w: 720px;
   }
@@ -118,6 +120,8 @@
 
   #app {
     height: 100vh;
+    height: 100svh;
+    height: var(--app-height);
     max-width: var(--max-w);
     margin: 0 auto;
     background: var(--bg);
@@ -179,19 +183,19 @@
   .chip-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 
   .pages { flex: 1; min-height: 0; position: relative; overflow: hidden; }
-  .page { max-height: 100vh; overflow-y: auto;
+  .page {
     display:none;
     height:100%;
     overflow-y:auto;
     overflow-x:hidden;
-    padding: 14px 14px calc(var(--nav-h) + 56px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 14px calc(var(--nav-h) + 72px + var(--bottom-safe));
     -webkit-overflow-scrolling: touch;
   }
   .page.active { display:block; }
 
   .bottom-nav {
-    height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
-    padding: 7px 10px env(safe-area-inset-bottom, 0px);
+    height: calc(var(--nav-h) + var(--bottom-safe));
+    padding: 7px 10px var(--bottom-safe);
     background: rgba(255,253,249,.92);
     backdrop-filter: blur(18px);
     border-top: 1px solid var(--line);
@@ -511,7 +515,7 @@
   .toast {
     position: fixed;
     left: 50%;
-    bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--nav-h) + 16px + var(--bottom-safe));
     transform: translateX(-50%) translateY(18px);
     max-width: min(92vw, 430px);
     background: rgba(33,29,25,.94);
@@ -528,6 +532,20 @@
     line-height: 1.45;
   }
   .toast.show { opacity:1; transform: translateX(-50%) translateY(0); }
+
+
+
+  @media (max-width: 720px) {
+    body:not(.standalone-mode) {
+      background: var(--bg);
+    }
+    body:not(.standalone-mode) #app {
+      height: var(--app-height);
+    }
+    body:not(.standalone-mode) .bottom-nav {
+      box-shadow: 0 -12px 28px rgba(49,42,34,.08);
+    }
+  }
 
   @media (min-width: 680px) {
     .feed-list { display:grid; grid-template-columns: repeat(2, 1fr); align-items:start; }
@@ -736,7 +754,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.3.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.3.2<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -797,13 +815,31 @@
 <div class="toast" id="toast"></div>
 
 <script>
+(function setupMobileViewport() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  document.body.classList.toggle('standalone-mode', !!isStandalone);
+  const apply = () => {
+    const vv = window.visualViewport;
+    const height = Math.round((vv && vv.height) || window.innerHeight || document.documentElement.clientHeight);
+    if (height > 0) document.documentElement.style.setProperty('--app-height', height + 'px');
+    const bottomGap = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+    document.documentElement.style.setProperty('--browser-bottom-pad', bottomGap > 0 ? bottomGap + 'px' : '0px');
+  };
+  apply();
+  window.addEventListener('resize', apply, { passive: true });
+  window.addEventListener('orientationchange', () => setTimeout(apply, 250), { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', apply, { passive: true });
+    window.visualViewport.addEventListener('scroll', apply, { passive: true });
+  }
+})();
 // ═══════════════════════════════════════════════════════════════
 //  ⚠️ Apps Script 웹앱 URL — 새 배포 후 URL이 바뀌면 여기를 교체
 //     (api-check.html의 API 상수와 반드시 동일해야 합니다)
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.3.2';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -1170,7 +1206,8 @@ const App = {
   },
 
   normalizeSpaces(spaces) {
-    const seen = new Set();
+    const seenIds = new Set();
+    const seenLabels = new Set();
     return (Array.isArray(spaces) ? spaces : [])
       .map((space, index) => ({
         space_id: String(space.space_id || '').trim(),
@@ -1181,8 +1218,11 @@ const App = {
       }))
       .filter(space => space.space_id && space.name)
       .filter(space => {
-        if (seen.has(space.space_id)) return false;
-        seen.add(space.space_id);
+        const idKey = space.space_id;
+        const labelKey = (space.icon + '|' + space.name).replace(/\s+/g, '').toLowerCase();
+        if (seenIds.has(idKey) || seenLabels.has(labelKey)) return false;
+        seenIds.add(idKey);
+        seenLabels.add(labelKey);
         return true;
       })
       .sort((a, b) => (a.order_index || 999) - (b.order_index || 999));
