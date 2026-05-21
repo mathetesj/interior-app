@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.1.1">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.1.1">
+<link rel="manifest" href="./manifest.json?v=2.1.2">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.1.2">
 <title>우리집 인테리어</title>
-<meta name="app-version" content="2.1.1">
+<meta name="app-version" content="2.1.2">
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   * { -webkit-tap-highlight-color: transparent; }
@@ -735,7 +735,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.1.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.1.2<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -802,13 +802,16 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.1.2';
 const PIN = '1234';
 const APP_PIN = '1234';
 
 // 네트워크 타임아웃 (ms)
 const JSONP_TIMEOUT_MS = 30000;
 const POST_TIMEOUT_MS = 45000;
+// 사진은 base64를 한 번에 보내면 Apps Script/iframe POST가 자주 실패하므로 작은 조각으로 나눠 전송합니다.
+const PHOTO_UPLOAD_CHUNK_SIZE = 30000;
+const PHOTO_UPLOAD_MAX_CHUNKS = 120;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
@@ -1379,7 +1382,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.1.1으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.1.2으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -1455,6 +1458,7 @@ const App = {
       form.action = API;
       form.target = iframeName;
       form.acceptCharset = 'UTF-8';
+      form.enctype = 'application/x-www-form-urlencoded';
       form.style.display = 'none';
 
       const addField = (name, value) => {
@@ -1587,6 +1591,7 @@ const App = {
       if (seq !== this.state.requestSeq) return;
       this.state.items = data.items || [];
       this.state.reactions = data.reactions || {};
+      if (data.comment_counts && typeof data.comment_counts === 'object') this.state.commentCounts = data.comment_counts;
       this.renderFeed();
       this.setSync('ok');
     } catch (err) {
@@ -1927,14 +1932,13 @@ const App = {
       caution
     };
 
-    // 클라이언트 검증 + body 완성
-    let optimisticPreview = null; // 카드에 즉시 보여줄 base64 데이터 URL
+    let photoBase64 = '';
+    let photoName = '';
     if (type === 'photo') {
       if (!this.state.photoBase64) return this.toast('사진을 선택해주세요.');
-      body.image_base64 = this.state.photoBase64;
-      body.image_name = this.state.photoName || 'photo.jpg';
-      // 사진은 업로드까지 시간이 걸리니 base64로 즉시 미리보기 (mobile은 작아서 OK)
-      optimisticPreview = 'data:image/jpeg;base64,' + this.state.photoBase64;
+      photoBase64 = this.state.photoBase64;
+      photoName = this.state.photoName || 'photo.jpg';
+      body.title = title || '사진 레퍼런스';
     }
     if (type === 'link') {
       const url = this.normalizeInputUrl(document.getElementById('link-url').value.trim());
@@ -1945,10 +1949,14 @@ const App = {
     if (type === 'memo' && !memo && !whyGood && !caution) return this.toast('메모 내용을 입력해주세요.');
 
     submitBtn.disabled = true;
-    submitBtn.textContent = '저장 중...';
+    submitBtn.textContent = type === 'photo' ? '업로드 준비 중...' : '저장 중...';
 
     try {
-      await this.apiPost(body);
+      if (type === 'photo') {
+        await this.uploadPhotoItem(body, photoBase64, photoName, submitBtn);
+      } else {
+        await this.apiPost(body);
+      }
       this.toast('저장 완료 ✓');
       try { localStorage.removeItem('interior_cache'); } catch (e) {}
       this.resetAddForm(true);
@@ -1959,11 +1967,68 @@ const App = {
       try { localStorage.removeItem('interior_cache'); } catch (e) {}
       try { await this.loadFeed(); } catch (e2) {}
       this.setSync('bad');
-      this.toast('저장 응답이 지연됐습니다. 보드를 확인해주세요.');
+      this.toast(err.message || '사진 저장 실패. 다시 시도해주세요.');
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = '저장하기';
     }
+  },
+
+  async uploadPhotoItem(baseBody, base64, imageName, submitBtn) {
+    const chunkSize = PHOTO_UPLOAD_CHUNK_SIZE;
+    const totalChunks = Math.max(1, Math.ceil(base64.length / chunkSize));
+    if (totalChunks > PHOTO_UPLOAD_MAX_CHUNKS) {
+      throw new Error('사진 용량이 큽니다. 더 작은 사진으로 다시 시도해주세요.');
+    }
+
+    let uploadId = '';
+    try {
+      submitBtn.textContent = '업로드 준비 중...';
+      const beginBody = Object.assign({}, baseBody, {
+        action: 'beginPhotoUpload',
+        image_name: imageName || 'photo.jpg',
+        mime_type: 'image/jpeg',
+        chunk_size: chunkSize,
+        chunk_count: totalChunks,
+        total_chars: base64.length
+      });
+      const begin = await this.apiPostWithRetry(beginBody, 2);
+      uploadId = begin.upload_id;
+      if (!uploadId) throw new Error('업로드 세션 생성 실패');
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize;
+        const chunk = base64.slice(start, start + chunkSize);
+        submitBtn.textContent = `업로드 중 ${i + 1}/${totalChunks}`;
+        await this.apiPostWithRetry({
+          action: 'uploadPhotoChunk',
+          upload_id: uploadId,
+          chunk_index: i,
+          chunk
+        }, 2);
+      }
+
+      submitBtn.textContent = 'Drive 저장 중...';
+      return await this.apiPostWithRetry({ action: 'finishPhotoUpload', upload_id: uploadId }, 1);
+    } catch (err) {
+      if (uploadId) {
+        try { this.firePost({ action: 'cancelPhotoUpload', upload_id: uploadId }); } catch (e) {}
+      }
+      throw err;
+    }
+  },
+
+  async apiPostWithRetry(body, tries = 2) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+      try {
+        return await this.apiPost(body);
+      } catch (err) {
+        lastErr = err;
+        if (i + 1 < tries) await new Promise(resolve => setTimeout(resolve, 650 + i * 500));
+      }
+    }
+    throw lastErr;
   },
 
   async loadConsensus() {
@@ -2301,7 +2366,7 @@ const App = {
       <p>${this.h(firstLine)}</p>
       <p class="debug-note">발생 위치: ${this.h(stage)}</p>
       <ol class="debug-steps">
-        <li>Apps Script 편집기에서 <code>code.gs</code> 전체를 v2.1.1으로 교체</li>
+        <li>Apps Script 편집기에서 <code>code.gs</code> 전체를 v2.1.2으로 교체</li>
         <li><code>runSetupOnce</code> 실행 후 권한 승인</li>
         <li><b>배포 관리 → 새 버전</b>으로 재배포 (액세스 권한: <b>모든 사용자</b>)</li>
         <li>받은 <code>/exec</code> URL을 <code>index.html</code> 상단 <code>API</code> 상수와 동일하게 유지</li>
@@ -2340,7 +2405,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=2.1.1', { scope: './', updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=2.1.2', { scope: './', updateViaCache: 'none' }).catch(() => {});
   });
 }
 </script>

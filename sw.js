@@ -1,22 +1,32 @@
-// 안정성을 위해 캐시를 사용하지 않습니다.
-// 매 요청마다 브라우저 기본 네트워크 흐름을 사용해서
-// Apps Script 응답이나 GitHub Pages 업데이트가 즉시 반영됩니다.
-
-const CACHE_NAME = 'interior-app-v2.1.0';
+const CACHE = 'interior-app-v2.1.2';
+const LOCAL_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(LOCAL_ASSETS)).catch(() => null));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))));
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  // intentionally not intercepting - let the browser handle everything
-  return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  if (event.request.method !== 'GET') return;
+
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
+    event.respondWith(fetch(event.request).then(response => {
+      const clone = response.clone();
+      caches.open(CACHE).then(cache => cache.put('./index.html', clone));
+      return response;
+    }).catch(() => caches.match('./index.html')));
+    return;
+  }
+
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+    if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
+    return response;
+  })));
 });
