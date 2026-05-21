@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.2.1">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.1">
+<link rel="manifest" href="./manifest.json?v=2.2.2">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.2">
 <title>우리집 인테리어</title>
 <meta name="app-version" content="2.2.0">
 <style>
@@ -736,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.2.1<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.2.2<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -803,7 +803,7 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.2.2';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -811,8 +811,8 @@ const APP_PIN = '1234';
 const JSONP_TIMEOUT_MS = 30000;
 const POST_TIMEOUT_MS = 120000;
 // 사진은 base64를 한 번에 보내면 Apps Script/iframe POST가 자주 실패하므로 작은 조각으로 나눠 전송합니다.
-const PHOTO_UPLOAD_CHUNK_SIZE = 18000;
-const PHOTO_UPLOAD_MAX_CHUNKS = 80;
+const PHOTO_UPLOAD_CHUNK_SIZE = 2400;
+const PHOTO_UPLOAD_MAX_CHUNKS = 500;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
@@ -1405,7 +1405,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.2.1으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.2.2으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -1416,7 +1416,10 @@ const App = {
       app_pin: APP_PIN,
       user_name: this.state.user ? this.state.user.name : ''
     });
-    return this.apiPostViaIframe(payload);
+
+    // Apps Script iframe POST가 모바일/PWA 환경에서 postMessage를 돌려주지 못하는 케이스가 있어,
+    // 모든 쓰기 요청도 JSONP GET으로 우회합니다. 사진은 작은 chunk로 쪼개 URL 길이 제한을 피합니다.
+    return this.apiJsonp(payload.action, payload);
   },
 
   // POST를 보내고 응답은 신경 안 쓰는 fire-and-forget
@@ -2036,7 +2039,7 @@ const App = {
       return await this.apiPostWithRetry({ action: 'finishPhotoUpload', upload_id: uploadId }, 1);
     } catch (err) {
       if (uploadId) {
-        try { this.firePost({ action: 'cancelPhotoUpload', upload_id: uploadId }); } catch (e) {}
+        try { this.apiJsonp('cancelPhotoUpload', { upload_id: uploadId }).catch(function(){}); } catch (e) {}
       }
       throw err;
     }

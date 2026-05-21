@@ -1,10 +1,10 @@
 // ============================================
-// 우리집 인테리어 — Apps Script API v2.2.1 (chunked photo upload)
+// 우리집 인테리어 — Apps Script API v2.2.2 (chunked photo upload)
 // GitHub Pages + Apps Script + Spreadsheet/Drive 구조 유지형 안정화 버전
 // ============================================
 
 var INTERIOR_CONFIG_206 = {
-  APP_VERSION: '2.2.1',
+  APP_VERSION: '2.2.2',
   SHEET_ID: '1rl9c7gPZ6egDOKTmzTPxOYXf0Z1uoYaJJawGVf3v0UE',
   APP_PIN: '1234',
   REQUIRE_PIN: true,
@@ -12,8 +12,8 @@ var INTERIOR_CONFIG_206 = {
   DEFAULT_PAGE_SIZE: 40,
   MAX_PAGE_SIZE: 80,
   UPLOAD_TTL_SECONDS: 1800,
-  UPLOAD_CHUNK_CHAR_SIZE: 18000,
-  MAX_UPLOAD_CHUNKS: 120,
+  UPLOAD_CHUNK_CHAR_SIZE: 2400,
+  MAX_UPLOAD_CHUNKS: 600,
   MAX_BASE64_CHARS: 1200000,
   USERS: ['홍대표', '아내']
 };
@@ -86,8 +86,19 @@ function doGet(e) {
     switch (action) {
       case 'getBootstrap': data = getBootstrapData_(params, userName); break;
       case 'getSpaces':    data = getSpacesData_(); break;
-      case 'ensureDefaultSpaces': data = ensureDefaultSpacesData_(); break;
-      case 'seedDefaultSpaces': data = ensureDefaultSpacesData_(); break;
+      case 'ensureDefaultSpaces': data = withLock_(function () { return ensureDefaultSpacesData_(); }); break;
+      case 'seedDefaultSpaces': data = withLock_(function () { return ensureDefaultSpacesData_(); }); break;
+      case 'driveDiagnose': data = driveDiagnoseData_(); break;
+      case 'addItem':     data = withLock_(function () { return addItemData_(params, { name: userName, email: userName }); }); break;
+      case 'beginPhotoUpload':  data = withLock_(function () { return beginPhotoUploadData_(params, { name: userName, email: userName }); }); break;
+      case 'uploadPhotoChunk':  data = uploadPhotoChunkData_(params, { name: userName, email: userName }); break;
+      case 'finishPhotoUpload': data = withLock_(function () { return finishPhotoUploadData_(params, { name: userName, email: userName }); }); break;
+      case 'cancelPhotoUpload': data = cancelPhotoUploadData_(params, { name: userName, email: userName }); break;
+      case 'setReaction': data = withLock_(function () { return setReactionData_(params, { name: userName, email: userName }); }); break;
+      case 'updateItem':  data = withLock_(function () { return updateItemData_(params, { name: userName, email: userName }); }); break;
+      case 'addComment':  data = withLock_(function () { return addCommentData_(params, { name: userName, email: userName }); }); break;
+      case 'saveSpace':   data = withLock_(function () { return saveSpaceData_(params); }); break;
+      case 'deleteItem':  data = withLock_(function () { return deleteItemData_(params, { name: userName, email: userName }); }); break;
       case 'diagnose':     data = diagnoseData_(); break;
       case 'getItems':     data = getItemsData_(params); break;
       case 'getReactions': data = getReactionsData_(params, userName); break;
@@ -124,7 +135,7 @@ function doPost(e) {
       case 'uploadPhotoChunk':  data = uploadPhotoChunkData_(body, user); break;
       case 'finishPhotoUpload': data = withLock_(function () { return finishPhotoUploadData_(body, user); }); break;
       case 'cancelPhotoUpload': data = cancelPhotoUploadData_(body, user); break;
-      case 'driveDiagnose': data = withLock_(function () { return driveDiagnoseData_(); }); break;
+      case 'driveDiagnose': data = driveDiagnoseData_(); break;
       case 'setReaction': data = withLock_(function () { return setReactionData_(body, user); }); break;
       case 'updateItem':  data = withLock_(function () { return updateItemData_(body, user); }); break;
       case 'addComment':  data = withLock_(function () { return addCommentData_(body, user); }); break;
