@@ -1,10 +1,10 @@
 // ============================================
-// 우리집 인테리어 — Apps Script API v2.2.3 (chunked photo upload)
+// 우리집 인테리어 — Apps Script API v2.3.0 (fast photo upload)
 // GitHub Pages + Apps Script + Spreadsheet/Drive 구조 유지형 안정화 버전
 // ============================================
 
 var INTERIOR_CONFIG_206 = {
-  APP_VERSION: '2.2.3',
+  APP_VERSION: '2.3.0',
   SHEET_ID: '1rl9c7gPZ6egDOKTmzTPxOYXf0Z1uoYaJJawGVf3v0UE',
   APP_PIN: '1234',
   REQUIRE_PIN: true,
@@ -89,6 +89,7 @@ function doGet(e) {
       case 'ensureDefaultSpaces': data = withLock_(function () { return ensureDefaultSpacesData_(); }); break;
       case 'seedDefaultSpaces': data = withLock_(function () { return ensureDefaultSpacesData_(); }); break;
       case 'driveDiagnose': data = driveDiagnoseData_(); break;
+      case 'getPostResult': data = getPostResultData_(params); break;
       case 'addItem':     data = withLock_(function () { return addItemData_(params, { name: userName, email: userName }); }); break;
       case 'beginPhotoUpload':  data = withLock_(function () { return beginPhotoUploadData_(params, { name: userName, email: userName }); }); break;
       case 'uploadPhotoChunk':  data = uploadPhotoChunkData_(params, { name: userName, email: userName }); break;
@@ -136,6 +137,7 @@ function doPost(e) {
       case 'finishPhotoUpload': data = withLock_(function () { return finishPhotoUploadData_(body, user); }); break;
       case 'cancelPhotoUpload': data = cancelPhotoUploadData_(body, user); break;
       case 'driveDiagnose': data = driveDiagnoseData_(); break;
+      case 'getPostResult': data = getPostResultData_(params); break;
       case 'setReaction': data = withLock_(function () { return setReactionData_(body, user); }); break;
       case 'updateItem':  data = withLock_(function () { return updateItemData_(body, user); }); break;
       case 'addComment':  data = withLock_(function () { return addCommentData_(body, user); }); break;
@@ -149,6 +151,13 @@ function doPost(e) {
     result = ok_(data);
   } catch (err) {
     result = fail_(err);
+  }
+
+  // Fast iframe POST mode: the iframe response cannot be read cross-origin,
+  // so store the small result server-side and let the front-end poll it with JSONP.
+  if (str_(params.store_result) === '1' || str_((body || {}).store_result) === '1') {
+    var rid = requestId || str_((body || {}).request_id || params.request_id);
+    if (rid) storePostResult_(rid, result);
   }
 
   if (wantsPostMessage) return postMessageOutput_(result, targetOrigin, requestId);
@@ -1093,6 +1102,33 @@ function normalizeUserName_(name) {
   return value || '알 수 없음';
 }
 
+
+function storePostResult_(requestId, result) {
+  var key = 'post_result_' + str_(requestId).slice(0, 120);
+  var text = JSON.stringify(result || fail_('empty result'));
+  try {
+    CacheService.getScriptCache().put(key, text, 600);
+  } catch (e) {}
+  try {
+    PropertiesService.getScriptProperties().setProperty(key, text);
+  } catch (e2) {}
+}
+
+function getPostResultData_(params) {
+  var requestId = str_(params.request_id);
+  if (!requestId) throw new Error('request_id is required');
+  var key = 'post_result_' + requestId.slice(0, 120);
+  var text = '';
+  try { text = CacheService.getScriptCache().get(key) || ''; } catch (e) {}
+  if (!text) {
+    try { text = PropertiesService.getScriptProperties().getProperty(key) || ''; } catch (e2) {}
+  }
+  if (!text) return { pending: true, request_id: requestId };
+  var result = JSON.parse(text);
+  try { CacheService.getScriptCache().remove(key); } catch (e3) {}
+  try { PropertiesService.getScriptProperties().deleteProperty(key); } catch (e4) {}
+  return { pending: false, request_id: requestId, result: result };
+}
 
 function postMessageOutput_(data, targetOrigin, requestId) {
   var origin = str_(targetOrigin || '*');

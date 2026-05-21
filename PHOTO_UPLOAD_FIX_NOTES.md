@@ -1,4 +1,4 @@
-# v2.2.3 사진 업로드 긴급 패치
+# v2.2.4 사진 업로드 긴급 패치
 
 ## 핵심 변경
 
@@ -11,12 +11,12 @@
 
 ## 반드시 해야 할 일
 
-1. Apps Script의 code.gs 전체를 v2.2.3 code.gs로 교체합니다.
+1. Apps Script의 code.gs 전체를 v2.2.4 code.gs로 교체합니다.
 2. 저장합니다.
 3. 함수 목록에서 `runSetupOnce`를 실행하고 권한을 승인합니다.
 4. 배포 관리에서 기존 웹 앱을 새 버전으로 배포합니다.
 5. GitHub에 index.html, manifest.json, sw.js, clear-cache.html, api-check.html, icon 파일을 올립니다.
-6. `/clear-cache.html`을 열고 캐시를 지운 뒤 `/?v=2.2.3`으로 접속합니다.
+6. `/clear-cache.html`을 열고 캐시를 지운 뒤 `/?v=2.2.4`으로 접속합니다.
 
 ## 진단 순서
 

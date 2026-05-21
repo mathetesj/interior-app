@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.2.3">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.3">
+<link rel="manifest" href="./manifest.json?v=2.3.0">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.3.0">
 <title>우리집 인테리어</title>
 <meta name="app-version" content="2.2.0">
 <style>
@@ -736,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.2.3<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.3.0<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -803,15 +803,16 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.2.3';
+const APP_VERSION = '2.3.0';
 const PIN = '1234';
 const APP_PIN = '1234';
 
 // 네트워크 타임아웃 (ms)
 const JSONP_TIMEOUT_MS = 30000;
 const POST_TIMEOUT_MS = 120000;
+const FAST_PHOTO_UPLOAD_TIMEOUT_MS = 120000;
 // 사진은 base64를 한 번에 보내면 Apps Script/iframe POST가 자주 실패하므로 작은 조각으로 나눠 전송합니다.
-const PHOTO_UPLOAD_CHUNK_SIZE = 2400;
+const PHOTO_UPLOAD_CHUNK_SIZE = 18000; // fallback only
 const PHOTO_UPLOAD_MAX_CHUNKS = 500;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
@@ -1409,7 +1410,7 @@ const App = {
 
   scriptLoadErrorMessage() {
     return 'Apps Script 스크립트 로드 실패. 다음을 순서대로 확인해주세요:\n' +
-      '① Apps Script 편집기에서 code.gs 전체를 v2.2.2으로 교체했는지\n' +
+      '① Apps Script 편집기에서 code.gs 전체를 v2.3.0으로 교체했는지\n' +
       '② runSetupOnce 함수를 실행해 권한 승인을 마쳤는지\n' +
       '③ 배포 관리에서 새 버전으로 재배포했는지 (액세스 권한: 모든 사용자)\n' +
       '④ 새로 받은 /exec URL을 index.html과 api-check.html의 API 상수에 동일하게 넣었는지';
@@ -1421,9 +1422,109 @@ const App = {
       user_name: this.state.user ? this.state.user.name : ''
     });
 
-    // Apps Script iframe POST가 모바일/PWA 환경에서 postMessage를 돌려주지 못하는 케이스가 있어,
-    // 모든 쓰기 요청도 JSONP GET으로 우회합니다. 사진은 작은 chunk로 쪼개 URL 길이 제한을 피합니다.
+    // 작은 쓰기 요청은 JSONP로 처리합니다. 사진처럼 payload가 큰 요청은 별도 fast POST+poll 경로를 사용합니다.
     return this.apiJsonp(payload.action, payload);
+  },
+
+  apiPostAndPoll(body, statusText = '저장 중...', submitBtn = null, timeoutMs = FAST_PHOTO_UPLOAD_TIMEOUT_MS) {
+    return new Promise((resolve, reject) => {
+      if (!API || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(API)) {
+        reject(new Error('API URL이 설정되지 않았거나 형식이 잘못되었습니다.'));
+        return;
+      }
+
+      const requestId = `fast_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const iframeName = `interior_fast_${requestId}`;
+      const payload = Object.assign({}, body, {
+        app_pin: APP_PIN,
+        user_name: this.state.user ? this.state.user.name : '',
+        request_id: requestId
+      });
+
+      const iframe = document.createElement('iframe');
+      iframe.name = iframeName;
+      iframe.style.display = 'none';
+      iframe.setAttribute('title', 'hidden-fast-upload');
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = API;
+      form.target = iframeName;
+      form.acceptCharset = 'UTF-8';
+      form.enctype = 'application/x-www-form-urlencoded';
+      form.style.display = 'none';
+
+      const addField = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      };
+
+      addField('payload', JSON.stringify(payload));
+      addField('store_result', '1');
+      addField('request_id', requestId);
+
+      let done = false;
+      let pollCount = 0;
+      let timer = null;
+
+      const cleanup = () => {
+        done = true;
+        clearTimeout(timer);
+        setTimeout(() => {
+          try { if (form.parentNode) form.parentNode.removeChild(form); } catch (e) {}
+          try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch (e) {}
+        }, 0);
+      };
+
+      const startedAt = Date.now();
+      const poll = async () => {
+        if (done) return;
+        pollCount += 1;
+        if (submitBtn) submitBtn.textContent = statusText + ' 확인 중' + '.'.repeat((pollCount % 3) + 1);
+        if (Date.now() - startedAt > timeoutMs) {
+          cleanup();
+          reject(new Error('사진 저장 응답 시간 초과. 서버에는 저장됐을 수 있으니 보드를 새로고침해 보세요.'));
+          return;
+        }
+        try {
+          const res = await this.apiJsonp('getPostResult', { request_id: requestId }, true);
+          if (res && res.pending) {
+            timer = setTimeout(poll, Math.min(1200 + pollCount * 120, 2500));
+            return;
+          }
+          cleanup();
+          if (!res || !res.result) {
+            reject(new Error('저장 결과를 확인하지 못했습니다.'));
+            return;
+          }
+          const json = res.result;
+          if (json.ok === false || json.error) reject(new Error(json.error || '저장 실패'));
+          else resolve(json);
+        } catch (err) {
+          // 결과 조회 일시 실패는 몇 번 더 기다립니다.
+          if (!done && Date.now() - startedAt <= timeoutMs) {
+            timer = setTimeout(poll, Math.min(1500 + pollCount * 150, 3000));
+          } else {
+            cleanup();
+            reject(err);
+          }
+        }
+      };
+
+      document.body.appendChild(iframe);
+      document.body.appendChild(form);
+      try {
+        if (submitBtn) submitBtn.textContent = statusText;
+        form.submit();
+        timer = setTimeout(poll, 900);
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    });
   },
 
   // POST를 보내고 응답은 신경 안 쓰는 fire-and-forget
@@ -2006,15 +2107,34 @@ const App = {
   },
 
   async uploadPhotoItem(baseBody, base64, imageName, submitBtn) {
+    // 빠른 경로: 사진 전체를 iframe POST로 한 번 보내고, 결과만 JSONP로 polling합니다.
+    // 이전 JSONP chunk 방식은 10~100회 이상의 Apps Script 호출이 필요해 너무 느렸습니다.
+    const fastBody = Object.assign({}, baseBody, {
+      action: 'addItem',
+      image_name: imageName || 'photo.jpg',
+      image_base64: base64
+    });
+
+    submitBtn.textContent = '사진 저장 중...';
+    try {
+      return await this.apiPostAndPoll(fastBody, '사진 저장 중', submitBtn, FAST_PHOTO_UPLOAD_TIMEOUT_MS);
+    } catch (fastErr) {
+      // 빠른 POST가 브라우저/네트워크 정책 때문에 실패한 경우에만 느린 chunk fallback을 사용합니다.
+      submitBtn.textContent = '느린 백업 업로드로 전환 중...';
+      return await this.uploadPhotoItemChunked(baseBody, base64, imageName, submitBtn, fastErr);
+    }
+  },
+
+  async uploadPhotoItemChunked(baseBody, base64, imageName, submitBtn, originalError = null) {
     const chunkSize = PHOTO_UPLOAD_CHUNK_SIZE;
     const totalChunks = Math.max(1, Math.ceil(base64.length / chunkSize));
     if (totalChunks > PHOTO_UPLOAD_MAX_CHUNKS) {
-      throw new Error('사진 용량이 큽니다. 더 작은 사진으로 다시 시도해주세요.');
+      throw originalError || new Error('사진 용량이 큽니다. 더 작은 사진으로 다시 시도해주세요.');
     }
 
     let uploadId = '';
     try {
-      submitBtn.textContent = '업로드 세션 생성 중...';
+      submitBtn.textContent = '백업 업로드 세션 생성 중...';
       const beginBody = Object.assign({}, baseBody, {
         action: 'beginPhotoUpload',
         image_name: imageName || 'photo.jpg',
@@ -2030,7 +2150,7 @@ const App = {
       for (let i = 0; i < totalChunks; i++) {
         const start = i * chunkSize;
         const chunk = base64.slice(start, start + chunkSize);
-        submitBtn.textContent = `업로드 중 ${i + 1}/${totalChunks}`;
+        submitBtn.textContent = `백업 업로드 ${i + 1}/${totalChunks}`;
         await this.apiPostWithRetry({
           action: 'uploadPhotoChunk',
           upload_id: uploadId,
@@ -2039,7 +2159,7 @@ const App = {
         }, 2);
       }
 
-      submitBtn.textContent = 'Drive 권한 확인/저장 중...';
+      submitBtn.textContent = 'Drive 저장 중...';
       return await this.apiPostWithRetry({ action: 'finishPhotoUpload', upload_id: uploadId }, 1);
     } catch (err) {
       if (uploadId) {
@@ -2436,7 +2556,7 @@ document.addEventListener('DOMContentLoaded', () => App.init());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=2.2.1', { scope: './', updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION, { scope: './', updateViaCache: 'none' }).then(reg => { try { reg.update(); } catch (e) {} }).catch(() => {});
   });
 }
 </script>

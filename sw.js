@@ -1,32 +1,40 @@
-const CACHE = 'interior-app-v2.2.3';
-const LOCAL_ASSETS = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE = 'interior-app-v2.3.0';
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(LOCAL_ASSETS)).catch(() => null));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))));
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+
+  // Never touch Apps Script, Google Drive, GitHub raw, or any cross-origin request.
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== 'GET') return;
 
-  if (event.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
-    event.respondWith(fetch(event.request).then(response => {
-      const clone = response.clone();
-      caches.open(CACHE).then(cache => cache.put('./index.html', clone));
-      return response;
-    }).catch(() => caches.match('./index.html')));
+  // HTML and app shell must always come from the network first.
+  // This prevents old index.html versions from being locked inside the PWA.
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request)));
     return;
   }
 
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
-    return response;
-  })));
+  // For local static assets, prefer network. Cache only as a very last fallback.
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(event.request, { cache: 'no-store' });
+      return response;
+    } catch (err) {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      throw err;
+    }
+  })());
 });
