@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f7f3ed">
-<link rel="manifest" href="./manifest.json?v=2.2.2">
-<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.2">
+<link rel="manifest" href="./manifest.json?v=2.2.3">
+<link rel="apple-touch-icon" href="./icon-192.png?v=2.2.3">
 <title>우리집 인테리어</title>
 <meta name="app-version" content="2.2.0">
 <style>
@@ -736,7 +736,7 @@
         <div class="panel-title"><div><h2>버전</h2><p>앱·서버 정보입니다.</p></div></div>
         <div class="settings-row">
           <div class="settings-icon">📦</div>
-          <div class="settings-label">앱 v2.2.2<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
+          <div class="settings-label">앱 v2.2.3<div class="settings-sub" id="settings-server-version">서버 버전 확인 중…</div></div>
         </div>
       </div>
     </section>
@@ -803,7 +803,7 @@
 // ═══════════════════════════════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycbygHAV80Zwm0ziWQZi0-SgpvDSHzur9_68f3EoGvkA-rCeEuxoOo1DkVDQajJUrLvl7/exec';
 
-const APP_VERSION = '2.2.2';
+const APP_VERSION = '2.2.3';
 const PIN = '1234';
 const APP_PIN = '1234';
 
@@ -1254,8 +1254,12 @@ const App = {
         `폴더 ID: ${data.folder_id || '-'}`,
         `테스트 파일 생성: ${data.test_file_created ? '성공' : '실패'}`,
         `테스트 파일 삭제: ${data.test_file_trashed ? '성공' : '실패'}`,
+        `공개 링크 공유: ${data.public_sharing_allowed ? '허용됨' : '차단됨'}`,
+        data.public_sharing_error ? `공유 차단 사유: ${data.public_sharing_error}` : '',
         '',
-        '이 진단이 성공하면 Drive 경로/권한 문제는 아닙니다.'
+        data.public_sharing_allowed
+          ? 'Drive 파일 생성과 공개 공유가 모두 가능합니다.'
+          : 'Drive 파일 생성은 가능하지만 공개 링크 공유는 차단되어 있습니다. 업로드 저장은 계속 진행되도록 처리했습니다.'
       ].join('\n'));
     } catch (err) {
       alert('Drive 권한 진단 실패\n\n' + (err.message || err) + '\n\nApps Script에서 runSetupOnce를 다시 실행하고 새 버전 배포를 확인해주세요.');

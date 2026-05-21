@@ -1,10 +1,10 @@
 // ============================================
-// 우리집 인테리어 — Apps Script API v2.2.2 (chunked photo upload)
+// 우리집 인테리어 — Apps Script API v2.2.3 (chunked photo upload)
 // GitHub Pages + Apps Script + Spreadsheet/Drive 구조 유지형 안정화 버전
 // ============================================
 
 var INTERIOR_CONFIG_206 = {
-  APP_VERSION: '2.2.2',
+  APP_VERSION: '2.2.3',
   SHEET_ID: '1rl9c7gPZ6egDOKTmzTPxOYXf0Z1uoYaJJawGVf3v0UE',
   APP_PIN: '1234',
   REQUIRE_PIN: true,
@@ -1017,6 +1017,14 @@ function driveDiagnoseData_() {
   var folder = DriveApp.getFolderById(folderId);
   var testFile = folder.createFile(Utilities.newBlob('ok ' + new Date().toISOString(), 'text/plain', 'interior_upload_test.txt'));
   var fileId = testFile.getId();
+  var sharingOk = false;
+  var sharingError = '';
+  try {
+    testFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    sharingOk = true;
+  } catch (shareErr) {
+    sharingError = shareErr && shareErr.message ? shareErr.message : String(shareErr);
+  }
   testFile.setTrashed(true);
   return {
     version: INTERIOR_CONFIG_206.APP_VERSION,
@@ -1024,7 +1032,9 @@ function driveDiagnoseData_() {
     folder_name: folder.getName(),
     test_file_id: fileId,
     test_file_created: true,
-    test_file_trashed: true
+    test_file_trashed: true,
+    public_sharing_allowed: sharingOk,
+    public_sharing_error: sharingError
   };
 }
 
@@ -1036,12 +1046,23 @@ function uploadToDrive_(base64Data, fileName, spaceId) {
   var bytes = Utilities.base64Decode(base64Data);
   var blob = Utilities.newBlob(bytes, 'image/jpeg', fileName);
   var file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   var fileId = file.getId();
+  var sharingOk = false;
+  var sharingError = '';
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    sharingOk = true;
+  } catch (shareErr) {
+    // Some Google Workspace / Drive policies block public link sharing.
+    // Upload itself should still succeed; do not fail the whole save.
+    sharingError = shareErr && shareErr.message ? shareErr.message : String(shareErr);
+  }
   return {
     url: 'https://drive.google.com/file/d/' + fileId + '/view?usp=drivesdk',
     thumbnailUrl: 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1600',
-    fileId: fileId
+    fileId: fileId,
+    publicSharing: sharingOk,
+    sharingError: sharingError
   };
 }
 
