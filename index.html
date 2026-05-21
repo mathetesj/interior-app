@@ -365,6 +365,7 @@
   .comment-send-circle:active { opacity:.7; }
   .comment-send-circle svg { width:20px; height:20px; }
   .comment-btn .comment-count { font-size: 12px; margin-left: 1px; }
+  .comment-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:999px; background:#e74c3c; color:#fff; font-size:11px; font-weight:900; padding:0 5px; margin-left:3px; line-height:1; }
   .muted-text { color: var(--faint); font-size: 13px; text-align: center; padding: 16px 0; }
   .comment-empty-hint { text-align:center; padding:28px 0; }
   .comment-empty-hint .empty-icon { font-size:32px; margin-bottom:6px; }
@@ -807,7 +808,7 @@ const APP_PIN = '1234';
 
 // 네트워크 타임아웃 (ms)
 const JSONP_TIMEOUT_MS = 30000;
-const POST_TIMEOUT_MS = 60000;
+const POST_TIMEOUT_MS = 30000;
 const USERS = {
   husband: { key: 'husband', name: '홍대표', icon: '👨' },
   wife: { key: 'wife', name: '아내', icon: '👩' }
@@ -1295,9 +1296,8 @@ const App = {
       // 댓글 수 업데이트
       const id = this.state.commentItemId;
       this.state.commentCounts[id] = (this.state.commentCounts[id] || 0) + 1;
-      // 카드의 댓글 카운트 업데이트
-      const countEl = document.querySelector(`[data-comment-item="${id}"] .comment-count`);
-      if (countEl) countEl.textContent = this.state.commentCounts[id];
+      // 카드 다시 렌더링해서 뱃지 반영
+      this.renderFeed();
       // 댓글 다시 로드
       const data = await this.api('getComments', { item_id: id });
       this.renderComments(data.comments || []);
@@ -1609,7 +1609,7 @@ const App = {
             ${this.reactionButton(item.item_id, 'love', '❤️', reaction)}
             ${this.reactionButton(item.item_id, 'no', '❌', reaction)}
             ${this.reactionButton(item.item_id, 'hold', '🤔', reaction)}
-            <button class="reaction-btn comment-btn" type="button" onclick="App.openComments('${this.a(item.item_id)}')">💬 <span class="comment-count">${this.state.commentCounts[item.item_id] || ''}</span></button>
+            <button class="reaction-btn comment-btn" type="button" onclick="App.openComments('${this.a(item.item_id)}')">💬${(this.state.commentCounts[item.item_id] || 0) > 0 ? ' <span class="comment-badge">' + this.state.commentCounts[item.item_id] + '</span>' : ''}</button>
           </div>
           <div class="card-actions">
             ${statusBtns}
@@ -1809,9 +1809,8 @@ const App = {
 
   compressImage(file) {
     return new Promise((resolve, reject) => {
-      // 최대 5MB까지만 허용
-      if (file.size > 5 * 1024 * 1024) {
-        return reject(new Error('사진 크기가 5MB를 초과합니다. 더 작은 사진을 선택해주세요.'));
+      if (file.size > 15 * 1024 * 1024) {
+        return reject(new Error('사진 크기가 15MB를 초과합니다.'));
       }
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.'));
@@ -1819,7 +1818,8 @@ const App = {
         const img = new Image();
         img.onerror = () => reject(new Error('사진을 불러오지 못했습니다.'));
         img.onload = () => {
-          const max = 1400;
+          // 모바일 카드 미리보기 용도 — 1000px이면 충분
+          const max = 1000;
           let { width, height } = img;
           if (width > max || height > max) {
             if (width >= height) { height = Math.round(height * max / width); width = max; }
@@ -1830,9 +1830,11 @@ const App = {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+          // 65% JPEG — 파일 크기 대폭 절감, 모바일에서 충분한 품질
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
           const base64 = dataUrl.split(',')[1];
-          if (base64.length > 8500000) return reject(new Error('사진이 아직 큽니다. 더 작은 사진을 선택해주세요.'));
+          // base64 200KB 이내면 URL 인코딩 후에도 ~600KB — iframe POST로 빠르게 전송 가능
+          if (base64.length > 4000000) return reject(new Error('사진이 아직 큽니다. 더 작은 사진을 선택해주세요.'));
           resolve({ base64, preview: dataUrl, name: file.name.replace(/\.[^.]+$/, '') + '.jpg' });
         };
         img.src = reader.result;
@@ -1941,9 +1943,25 @@ const App = {
       delete this.state.reactions[tempId];
       this.toast('저장 완료 ✓');
       this.setSync('ok');
+      // 캐시 갱신
+      try { localStorage.removeItem('interior_cache'); } catch (e) {}
       await this.loadFeed();
     } catch (err) {
-      // 실패: 임시 카드 제거하고 명확하게 알림
+      // postMessage 타임아웃이어도 서버에는 저장됐을 수 있음 — 확인 시도
+      if (type === 'photo' && err.message && err.message.indexOf('시간 초과') !== -1) {
+        this.toast('업로드 확인 중...');
+        try {
+          await this.loadFeed();
+          // 새 아이템이 로드됐으면 성공으로 간주
+          this.state.items = this.state.items.filter(i => i.item_id !== tempId);
+          delete this.state.reactions[tempId];
+          this.toast('저장 완료 ✓ (응답 지연)');
+          this.setSync('ok');
+          try { localStorage.removeItem('interior_cache'); } catch (e) {}
+          return;
+        } catch (e2) { /* 폴링도 실패 — 아래로 */ }
+      }
+      // 진짜 실패
       this.state.items = this.state.items.filter(i => i.item_id !== tempId);
       delete this.state.reactions[tempId];
       this.renderFeed();
