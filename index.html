@@ -1222,7 +1222,7 @@ const App = {
     const modal = document.getElementById('comment-modal');
     const list = document.getElementById('comment-list');
     const input = document.getElementById('comment-input');
-    modal.classList.add('active');
+    modal.classList.add('open');
     list.innerHTML = '<p class="muted-text">댓글을 불러오는 중...</p>';
     input.value = '';
     try {
@@ -1287,7 +1287,7 @@ const App = {
   },
 
   closeCommentModal() {
-    document.getElementById('comment-modal').classList.remove('active');
+    document.getElementById('comment-modal').classList.remove('open');
     this.state.commentItemId = null;
   },
 
